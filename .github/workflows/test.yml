@@ -10,3 +10,12 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Porównanie z niezależnym MES (xdfem2d) i audyt DXF (ezdxf)
+        run: |
+          pip install xdfem2d==2026.10.29 ezdxf==1.4.5
+          node tools/export-case.mjs cc.json
+          python3 tools/cross-check.py cc.json
+          npm test

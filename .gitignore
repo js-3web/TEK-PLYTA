@@ -5,3 +5,5 @@ app/js/neutralino.js
 bin/
 dist/
 .tmp/
+cross-check.json
+cc.json
