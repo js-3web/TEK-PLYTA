@@ -23,7 +23,9 @@ import { generateMesh } from '../mesh/mesher.js';
 import { analyzeSlab } from '../analysis/build.js';
 import { slabEnvelopes } from '../combinations.js';
 import { designSlab } from '../design/slab.js';
-import { checkSlabSLS } from '../design/sls.js';
+import { checkSlabSLS, stressCheck } from '../design/sls.js';
+import { checkShear } from '../design/shear.js';
+import { selectRebar } from '../design/rebar.js';
 import { CONCRETE } from '../norms/en1992-pl.js';
 
 export const VERSION = '0.5.0';
@@ -120,10 +122,13 @@ export function runProject(project, progress = () => {}) {
     punching: project.punching?.beta === 'uproszczone' ? {} : { beta: project.punching?.beta },
   };
   const uls = designSlab({ geo, mesh, env, design });
+  const rebar = selectRebar({ geo, mesh, uls, design });
   t.uls = Date.now();
 
   progress('SGU', 0.7);
-  const sls = checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls: project.sls });
+  const sls = checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls: project.sls, provided: rebar.provided });
+  const shear = checkShear({ geo, mesh, env, provided: rebar.provided, depths: uls.depths, mat: uls.mat, h0: project.mesh?.h0 ?? 0.5 });
+  const stress = stressCheck({ env, provided: rebar.provided, depths: uls.depths, mat: uls.mat, h: s.h, exposure: project.sls?.exposure });
   t.sls = Date.now();
   progress('gotowe', 1);
 
@@ -137,12 +142,21 @@ export function runProject(project, progress = () => {}) {
     mx_max: f32(ulsEnv.mx.max), mx_min: f32(ulsEnv.mx.min),
     my_max: f32(ulsEnv.my.max), my_min: f32(ulsEnv.my.min),
     mxy_max: f32(ulsEnv.mxy.max), mxy_min: f32(ulsEnv.mxy.min),
+    vx_max: f32(ulsEnv.vx.max), vx_min: f32(ulsEnv.vx.min), vy_max: f32(ulsEnv.vy.max), vy_min: f32(ulsEnv.vy.min),
+    vEd: shear.vEd, shearUtil: shear.util,
+    w_char: f32(env.nodes.CHAR.w.max),
+    mx_char_max: f32(env.nodes.CHAR.mx.max), mx_char_min: f32(env.nodes.CHAR.mx.min),
+    my_char_max: f32(env.nodes.CHAR.my.max), my_char_min: f32(env.nodes.CHAR.my.min),
+    mx_qp_max: f32(qp.mx.max), mx_qp_min: f32(qp.mx.min), my_qp_max: f32(qp.my.max), my_qp_min: f32(qp.my.min),
   };
   for (const k of ['bottomX', 'bottomY', 'topX', 'topY']) {
     maps[`Md_${k}`] = f32(uls.nodes[k].design);
     maps[`As_${k}`] = f32(uls.nodes[k].AsReq);
     maps[`dAs_${k}`] = f32(uls.nodes[k].AsExtra);
     maps[`wk_${k}`] = f32(sls.cracks[k]);
+    maps[`Asp_${k}`] = f32(rebar.provided[k]);
+    maps[`sigS_${k}`] = stress.layers[k].sigS;
+    maps[`sigC_${k}`] = stress.layers[k].sigC;
   }
 
   // kontrola modelu: suma reakcji vs obciążenie dla każdego przypadku
@@ -167,12 +181,15 @@ export function runProject(project, progress = () => {}) {
 
   return {
     ok: true, version: VERSION, geo, errors: [],
-    warnings: [...geo.warnings, ...mesh.warnings ?? [], ...analysis.warnings, ...uplift, ...uls.warnings, ...sls.warnings],
+    warnings: [...geo.warnings, ...mesh.warnings ?? [], ...analysis.warnings, ...uplift, ...uls.warnings, ...rebar.warnings, ...shear.warnings, ...stress.warnings, ...sls.warnings],
     mesh: { nodes: mesh.nodes, elems: mesh.elems, quality: mesh.quality },
     cases: caseList, equilibrium,
     combinations: { ULS: env.schemes.ULS.map(v => v.name), QP: env.schemes.QP.map(v => v.name) },
     supports: env.supports.ULS.map(s => ({ label: s.label, kind: s.kind, Vmax: s.V.max, Vmin: s.V.min, gov: s.V.govMax })),
     punching: uls.punching.map(p => ({ ...p })),
+    rebar: { layers: rebar.layers, punching: rebar.punching, warnings: rebar.warnings },
+    shear: { maxUtil: shear.maxUtil, at: shear.at },
+    stress: { max: stress.max, limits: stress.limits, aggressive: stress.aggressive },
     sls: { phi: sls.phi, ecs: sls.ecs, creep: sls.creep, shrinkage: sls.shrinkage, wmax: sls.wmax, wkMax: sls.wkMax,
       fields: sls.fields, iterations: sls.deflection.iterations, converged: sls.deflection.converged },
     materials: { ...uls.mat, norm: undefined }, depths: uls.depths, design: { base: design.base },

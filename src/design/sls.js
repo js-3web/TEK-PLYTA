@@ -147,15 +147,16 @@ export function longTermDeflection({ analysis, env, mat, reinf, depths, h, phi, 
 //               fields: [{ label, pts: wielokąt [m], L [m] }] — pola do oceny ugięć (L zadaje projektant) }
 // Ugięcie po wykonaniu wykończeń (L/500) w przybliżeniu: w_całk − w_natychmiastowe od G (Ecm, bez pełzania).
 
-export function checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls }) {
+export function checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls, provided = null }) {
   const mat = uls.mat, h = design.h, hmm = h * 1000, N = mesh.nodes.length;
   const h0 = sls.h0 ?? hmm;
   const creep = creepCoefficient({ fck: mat.fck, RH: sls.RH, h0, t0: sls.t0 ?? 28, cement: sls.cement ?? 'N' });
   const shr = shrinkageStrain({ fck: mat.fck, RH: sls.RH, h0, cement: sls.cement ?? 'N' });
   const phi = sls.phi ?? creep.phi, ecs = sls.ecs ?? shr.ecs;
+  // zbrojenie zapewnione: dobrane pręty (siatka + dodatki w strefach) albo — bez doboru — max(siatka, As wymagane)
   const reinf = {};
   for (const k of ['bottomX', 'bottomY', 'topX', 'topY'])
-    reinf[k] = Float64Array.from(uls.nodes[k].AsReq, v => Math.max(Number.isFinite(v) ? v : 0, uls.nodes[k].base));
+    reinf[k] = provided?.[k] ?? Float64Array.from(uls.nodes[k].AsReq, v => Math.max(Number.isFinite(v) ? v : 0, uls.nodes[k].base));
 
   // --- rysy: momenty Wood–Armera z kombinacji quasi-stałej ---
   const mQP = designMomentEnvelope(env.fields.nodes, env.schemes.QP);
@@ -190,5 +191,34 @@ export function checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls }) {
   const warnings = [];
   if (!lt.converged) warnings.push({ code: 'ugiecia-brak-zbieznosci', msg: `Ugięcia: iteracja zarysowania niezbieżna po ${lt.iterations} krokach.` });
   if (wkMax > wmax) warnings.push({ code: 'rysy', msg: `Szerokość rys ${wkMax.toFixed(2)} mm > wmax = ${wmax} mm (${sls.exposure ?? 'XC1'}).` });
-  return { phi, ecs, creep, shrinkage: shr, wmax, cracks, wkMax, deflection: lt, instantaneousG: inst, fields, warnings };
+  return { phi, ecs, creep, shrinkage: shr, wmax, cracks, wkMax, deflection: lt, instantaneousG: inst, fields, warnings, reinf };
+}
+
+// Ograniczenie naprężeń 7.2: przekrój zarysowany, αe = Es/Ecm, moment Wood–Armera danej kombinacji.
+// σc = M·x/I_II, σs = αe·M·(d − x)/I_II. Granice (wartości zalecane, NA do potwierdzenia):
+//   kombinacja charakterystyczna: σc ≤ k1·fck = 0,6·fck (wymagane przy XD, XF, XS — 7.2(2)), σs ≤ k3·fyk = 0,8·fyk (7.2(5));
+//   kombinacja quasi-stała: σc ≤ k2·fck = 0,45·fck (powyżej — pełzanie nieliniowe, 7.2(3)).
+export function stressCheck({ env, provided, depths, mat, h, exposure }) {
+  const out = {}, hmm = h * 1000, aE = mat.Es / (mat.Ecm * 1000);
+  const char = designMomentEnvelope(env.fields.nodes, env.schemes.CHAR), qp = designMomentEnvelope(env.fields.nodes, env.schemes.QP);
+  let sc = 0, ss = 0, scQ = 0;
+  for (const [key, face, dir] of [['bottomX', 'bottom', 'x'], ['bottomY', 'bottom', 'y'], ['topX', 'top', 'x'], ['topY', 'top', 'y']]) {
+    const d = depths[face][dir] * 1000, N = char[key].length;
+    const sigC = new Float32Array(N), sigS = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const As = provided[key][i];
+      const { x, III } = crackedSection({ h: hmm, d, As: Math.max(As, 1e-6), alphaE: aE });
+      const M = Math.abs(char[key][i]) * 1e6, Mq = Math.abs(qp[key][i]) * 1e6;
+      sigC[i] = M * x / III; sigS[i] = aE * M * (d - x) / III;
+      sc = Math.max(sc, sigC[i]); ss = Math.max(ss, sigS[i]); scQ = Math.max(scQ, Mq * x / III);
+    }
+    out[key] = { sigC, sigS };
+  }
+  const aggressive = /^X[DFS]/.test(exposure ?? '');
+  const limits = { sigCchar: 0.6 * mat.fck, sigS: 0.8 * mat.fyk, sigCqp: 0.45 * mat.fck };
+  const warnings = [];
+  if (ss > limits.sigS) warnings.push({ code: 'naprezenia-stal', msg: `σs = ${ss.toFixed(0)} MPa > 0,8·fyk = ${limits.sigS.toFixed(0)} MPa (7.2(5), kombinacja charakterystyczna).` });
+  if (aggressive && sc > limits.sigCchar) warnings.push({ code: 'naprezenia-beton', msg: `σc = ${sc.toFixed(1)} MPa > 0,6·fck = ${limits.sigCchar.toFixed(1)} MPa (7.2(2), klasa ${exposure}).` });
+  if (scQ > limits.sigCqp) warnings.push({ code: 'pelzanie-nieliniowe', msg: `σc (quasi-stała) = ${scQ.toFixed(1)} MPa > 0,45·fck — pełzanie nieliniowe (7.2(3)); model ugięć liniowy w pełzaniu.` });
+  return { layers: out, max: { sigC: sc, sigS: ss, sigCqp: scQ }, limits, aggressive, warnings };
 }
