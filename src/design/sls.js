@@ -18,16 +18,17 @@ export function crackedSection({ h, d, As, alphaE }) {
 
 // Szerokość rys wk (7.3.4) dla momentu M [kNm/m] (kombinacja quasi-stała).
 // c — otulina prętów tej warstwy [mm], phi — średnica [mm], s — rozstaw [mm].
-// k1 = 0,8; k2 = 0,5 (zginanie); k3 = 3,4; k4 = 0,425; kt = 0,4 (obciążenie długotrwałe) — wartości zalecane.
-export function crackWidth({ M, h, d, As, c, phi, s, fctm, Ecm, Es = 200000 }) {
+// p — współczynniki 7.3.4 (domyślnie zalecane: k1 = 0,8; k2 = 0,5 zginanie; k3 = 3,4; k4 = 0,425; kt = 0,4 długotrwałe).
+export const CRACK_DEFAULT = { k1: 0.8, k2: 0.5, k3: 3.4, k4: 0.425, kt: 0.4 };
+export function crackWidth({ M, h, d, As, c, phi, s, fctm, Ecm, Es = 200000, p = CRACK_DEFAULT }) {
   const alphaE = Es / Ecm;
   const { x, III } = crackedSection({ h, d, As, alphaE });
   const Mcr = fctm * 1000 * h * h / 6 / 1e6; // kNm/m
   const sigmaS = alphaE * Math.abs(M) * 1e6 * (d - x) / III;
   const hcef = Math.min(2.5 * (h - d), (h - x) / 3, h / 2);
   const rhoPeff = As / (1000 * hcef);
-  const eps = Math.max((sigmaS - 0.4 * fctm / rhoPeff * (1 + alphaE * rhoPeff)) / Es, 0.6 * sigmaS / Es); // (7.9)
-  const srMax = s <= 5 * (c + phi / 2) ? 3.4 * c + 0.8 * 0.5 * 0.425 * phi / rhoPeff : 1.3 * (h - x); // (7.11), (7.14)
+  const eps = Math.max((sigmaS - p.kt * fctm / rhoPeff * (1 + alphaE * rhoPeff)) / Es, 0.6 * sigmaS / Es); // (7.9)
+  const srMax = s <= 5 * (c + phi / 2) ? p.k3 * c + p.k1 * p.k2 * p.k4 * phi / rhoPeff : 1.3 * (h - x); // (7.11), (7.14)
   const cracked = Math.abs(M) > Mcr;
   return { wk: cracked ? srMax * eps : 0, cracked, Mcr, sigmaS, x, III, hcef, rhoPeff, eps, srMax };
 }
@@ -160,7 +161,7 @@ export function checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls, provi
 
   // --- rysy: momenty Wood–Armera z kombinacji quasi-stałej ---
   const mQP = designMomentEnvelope(env.fields.nodes, env.schemes.QP);
-  const wmax = WMAX[sls.exposure ?? 'XC1'];
+  const wmax = (mat.norm.wmax ?? WMAX)[sls.exposure ?? 'XC1'];
   const cracks = {};
   let wkMax = 0;
   for (const [key, face, dir] of [['bottomX', 'bottom', 'x'], ['bottomY', 'bottom', 'y'], ['topX', 'top', 'x'], ['topY', 'top', 'y']]) {
@@ -170,7 +171,7 @@ export function checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls, provi
     for (let i = 0; i < N; i++) {
       const M = Math.abs(mQP[key][i]);
       if (M < 1e-9) continue;
-      wk[i] = crackWidth({ M, h: hmm, d, As: reinf[key][i], c, phi: phiBar, s, fctm: mat.fctm, Ecm: mat.Ecm * 1000 }).wk;
+      wk[i] = crackWidth({ M, h: hmm, d, As: reinf[key][i], c, phi: phiBar, s, fctm: mat.fctm, Ecm: mat.Ecm * 1000, Es: mat.Es, p: mat.norm.crack ?? CRACK_DEFAULT }).wk;
       wkMax = Math.max(wkMax, wk[i]);
     }
     cracks[key] = wk;
@@ -178,8 +179,9 @@ export function checkSlabSLS({ geo, mesh, analysis, env, uls, design, sls, provi
 
   // --- ugięcia ---
   const common = { analysis, env, mat, reinf, depths: uls.depths, h };
-  const lt = longTermDeflection({ ...common, phi, ecs });
-  const inst = longTermDeflection({ ...common, phi: 0, ecs: 0, onlyPermanent: true, beta: 1.0 });
+  const bL = mat.norm.defl?.betaLong ?? 0.5, bS = mat.norm.defl?.betaShort ?? 1.0;
+  const lt = longTermDeflection({ ...common, phi, ecs, beta: bL });
+  const inst = longTermDeflection({ ...common, phi: 0, ecs: 0, onlyPermanent: true, beta: bS });
   const fields = (sls.fields ?? []).map(f => {
     let iMax = -1;
     mesh.nodes.forEach((p, i) => { if (pointInPolygon(p, f.pts) && (iMax < 0 || lt.w[i] > lt.w[iMax])) iMax = i; });
@@ -215,10 +217,11 @@ export function stressCheck({ env, provided, depths, mat, h, exposure }) {
     out[key] = { sigC, sigS };
   }
   const aggressive = /^X[DFS]/.test(exposure ?? '');
-  const limits = { sigCchar: 0.6 * mat.fck, sigS: 0.8 * mat.fyk, sigCqp: 0.45 * mat.fck };
+  const k = mat.norm.stress ?? { k1: 0.6, k2: 0.45, k3: 0.8 };
+  const limits = { sigCchar: k.k1 * mat.fck, sigS: k.k3 * mat.fyk, sigCqp: k.k2 * mat.fck };
   const warnings = [];
-  if (ss > limits.sigS) warnings.push({ code: 'naprezenia-stal', msg: `σs = ${ss.toFixed(0)} MPa > 0,8·fyk = ${limits.sigS.toFixed(0)} MPa (7.2(5), kombinacja charakterystyczna).` });
-  if (aggressive && sc > limits.sigCchar) warnings.push({ code: 'naprezenia-beton', msg: `σc = ${sc.toFixed(1)} MPa > 0,6·fck = ${limits.sigCchar.toFixed(1)} MPa (7.2(2), klasa ${exposure}).` });
-  if (scQ > limits.sigCqp) warnings.push({ code: 'pelzanie-nieliniowe', msg: `σc (quasi-stała) = ${scQ.toFixed(1)} MPa > 0,45·fck — pełzanie nieliniowe (7.2(3)); model ugięć liniowy w pełzaniu.` });
+  if (ss > limits.sigS) warnings.push({ code: 'naprezenia-stal', msg: `σs = ${ss.toFixed(0)} MPa > ${k.k3}·fyk = ${limits.sigS.toFixed(0)} MPa (7.2(5), kombinacja charakterystyczna).` });
+  if (aggressive && sc > limits.sigCchar) warnings.push({ code: 'naprezenia-beton', msg: `σc = ${sc.toFixed(1)} MPa > ${k.k1}·fck = ${limits.sigCchar.toFixed(1)} MPa (7.2(2), klasa ${exposure}).` });
+  if (scQ > limits.sigCqp) warnings.push({ code: 'pelzanie-nieliniowe', msg: `σc (quasi-stała) = ${scQ.toFixed(1)} MPa > ${k.k2}·fck — pełzanie nieliniowe (7.2(3)); model ugięć liniowy w pełzaniu.` });
   return { layers: out, max: { sigC: sc, sigS: ss, sigCqp: scQ }, limits, aggressive, warnings };
 }

@@ -114,3 +114,4 @@ table.mini select{max-width:210px}
 .progress .bar{height:6px;background:var(--cyan-dark);width:0;border-radius:3px;margin-bottom:8px;transition:width .2s}
 .hidden{display:none}
 .report-frame{width:100%;height:calc(100vh - 220px);border:1px solid var(--border);background:#fff}
+input.changed{background:var(--warning-bg);border-color:#e6cf93;font-weight:600}

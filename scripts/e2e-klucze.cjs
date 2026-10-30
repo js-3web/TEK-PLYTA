@@ -1,4 +1,4 @@
-// Test TEK-KLUCZE (Playwright): para kluczy z aplikacji → licencja akceptowana przez program (license-core);
+// Test TEK-PLYTA-klucze (Playwright): para kluczy z aplikacji → licencja akceptowana przez program (license-core);
 // klucz prywatny z scripts/license.mjs wczytany w aplikacji → ten sam format; podróbka odrzucona.
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
@@ -6,14 +6,14 @@ const { mkdtempSync, readFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 let chromium;
-try { ({ chromium } = require('playwright')); } catch { console.log('Brak Playwright — test TEK-KLUCZE pominięty.'); process.exit(0); }
+try { ({ chromium } = require('playwright')); } catch { console.log('Brak Playwright — test TEK-PLYTA-klucze pominięty.'); process.exit(0); }
 
 (async () => {
   const { verifyLicense } = await import('../src/app/license-core.js');
   const b = await chromium.launch(), ctx = await b.newContext({ acceptDownloads: true }), p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   try {
-    await p.goto('file://' + resolve('dist-tools/TEK-KLUCZE.html')); await p.waitForFunction(() => window.__KL);
+    await p.goto('file://' + resolve('dist-tools/TEK-PLYTA-klucze.html')); await p.waitForFunction(() => window.__KL);
     // 1) nowa para w aplikacji
     const [pem] = await Promise.all([p.waitForEvent('download'), p.click('[data-act=generate]')]);
     assert.equal(pem.suggestedFilename(), 'tekplyta-private.pem');
@@ -37,6 +37,6 @@ try { ({ chromium } = require('playwright')); } catch { console.log('Brak Playwr
     const key2 = await p.inputValue('#lOut');
     assert.equal((await verifyLicense(key2, pubCli)).ok, true, 'licencja z kluczem CLI');
     assert.deepEqual(errs, []);
-    console.log('test TEK-KLUCZE: OK');
+    console.log('test TEK-PLYTA-klucze: OK');
   } finally { await b.close(); }
 })().catch(e => { console.error(e); process.exit(1); });

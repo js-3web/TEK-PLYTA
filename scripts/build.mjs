@@ -15,11 +15,11 @@ let rev = ''; try { rev = readFileSync('.git/HEAD', 'utf8').startsWith('ref:') ?
 writeFileSync('app/dist/build.json', JSON.stringify({ built: new Date().toISOString(), rev }));
 console.log('app/dist gotowe');
 
-// TEK-KLUCZE — osobna aplikacja do wydawania licencji: jeden plik HTML (CSS, fonty i skrypt wbudowane)
+// TEK-PLYTA-klucze — osobna aplikacja do wydawania licencji: jeden plik HTML (CSS, fonty i skrypt wbudowane)
 mkdirSync('dist-tools', { recursive: true });
 const kl = await build({ ...common, sourcemap: false, format: 'iife', entryPoints: ['tools/klucze/klucze.js'], write: false });
 const css = readFileSync('app/fonts.css', 'utf8') + readFileSync('app/styles.css', 'utf8');
-writeFileSync('dist-tools/TEK-KLUCZE.html', `<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TEK-KLUCZE</title><style>${css}</style></head>`
-  + `<body><header class="appbar"><div class="brand" style="color:#22C3E6;font-family:var(--mono);font-size:.8rem;letter-spacing:.08em">TEK-KLUCZE</div></header><main><div id="view"></div></main><div id="toast" class="toast"></div>`
+writeFileSync('dist-tools/TEK-PLYTA-klucze.html', `<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TEK-PLYTA-klucze</title><style>${css}</style></head>`
+  + `<body><header class="appbar"><div class="brand" style="color:#22C3E6;font-family:var(--mono);font-size:.8rem;letter-spacing:.08em">TEK-PLYTA-klucze</div></header><main><div id="view"></div></main><div id="toast" class="toast"></div>`
   + `<script>${kl.outputFiles[0].text.replace(/<\/script/g, '<\\/script')}</script></body></html>`);
-console.log('dist-tools/TEK-KLUCZE.html gotowe');
+console.log('dist-tools/TEK-PLYTA-klucze.html gotowe');

@@ -1,5 +1,5 @@
 # Budowa programu dla Windows — przy pushu, tagu v* albo ręcznie z zakładki Actions.
-# Artefakt „TEK-PLYTA-windows”: instalator z jednego pliku (NSIS), wersja przenośna .exe i TEK-KLUCZE.html.
+# Artefakt „TEK-PLYTA-windows”: instalator z jednego pliku (NSIS), wersja przenośna .exe i TEK-PLYTA-klucze.html.
 # Testy (w tym porównanie z niezależnym MES) muszą przejść przed budową.
 name: exe
 on:
@@ -33,7 +33,7 @@ jobs:
           mkdir -p out
           cp dist/TEK-PLYTA-setup-$VERSION.exe out/
           cp dist/TEK-PLYTA/TEK-PLYTA-win_x64.exe out/TEK-PLYTA-$VERSION-przenosna.exe
-          cp dist-tools/TEK-KLUCZE.html out/
+          cp dist-tools/TEK-PLYTA-klucze.html out/
           ls -la out
       - uses: actions/upload-artifact@v4
         with:

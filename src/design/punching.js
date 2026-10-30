@@ -132,7 +132,7 @@ export function punchingCheck({ VEd, beta, u1, u0, d, rhoX, rhoY, mat }) {
   const k = Math.min(2, 1 + Math.sqrt(200 / dmm));
   const rho = Math.min(n.rhoMax, Math.sqrt(rhoX * rhoY));
   const CRdc = n.CRdc(n.gammaC);
-  const vmin = 0.035 * k ** 1.5 * Math.sqrt(mat.fck);
+  const vmin = (n.vminCoef ?? 0.035) * k ** 1.5 * Math.sqrt(mat.fck);                 // (6.3N)
   const vRdc = Math.max(CRdc * k * Math.cbrt(100 * rho * mat.fck), vmin);     // (6.47), σcp = 0
   const vEd = beta * V / (u1mm * dmm);                                       // (6.38)
   const nu = 0.6 * (1 - mat.fck / 250);                                       // (6.6N)

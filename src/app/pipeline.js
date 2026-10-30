@@ -27,6 +27,7 @@ import { checkSlabSLS, stressCheck } from '../design/sls.js';
 import { checkShear } from '../design/shear.js';
 import { selectRebar } from '../design/rebar.js';
 import { CONCRETE } from '../norms/en1992-pl.js';
+import { resolveParams, diffParams, ec0Norm, ec2Norm, psiTable } from '../norms/params.js';
 
 export const VERSION = '0.6.0';
 
@@ -49,6 +50,7 @@ export function defaultProject() {
     combination: { formulas: ['6.10a', '6.10b'] },
     punching: { beta: 'uproszczone' },
     sls: { RH: 50, cement: 'N', t0: 28, exposure: 'XC1', fields: [] },
+    norms: {}, // nadpisania współczynników normowych (puste = wartości normowe, src/norms/params.js)
   };
 }
 
@@ -109,7 +111,8 @@ export function runProject(project, progress = () => {}) {
   progress('kombinacje', 0.5);
   const actions = { G0: { type: 'G' } };
   for (const l of labels) actions[l] = project.loads[l].type === 'G' ? { type: 'G' } : { type: 'Q', category: project.loads[l].category, group: project.loads[l].group };
-  const env = slabEnvelopes(analysis.cases, actions, { formulas: project.combination?.formulas });
+  const params = resolveParams(project.norms), formulas = project.combination?.formulas ?? ['6.10a', '6.10b'];
+  const env = slabEnvelopes(analysis.cases, actions, { formulas, norm: ec0Norm(params, formulas), psiTable: psiTable(params) });
 
   progress('SGN', 0.6);
   const r = project.reinf;
@@ -120,6 +123,7 @@ export function runProject(project, progress = () => {}) {
       top: { x: meshArea(r.top.phiX, r.top.sX), y: meshArea(r.top.phiY, r.top.sY) },
     },
     punching: project.punching?.beta === 'uproszczone' ? {} : { beta: project.punching?.beta },
+    norm: ec2Norm(params),
   };
   const uls = designSlab({ geo, mesh, env, design });
   const rebar = selectRebar({ geo, mesh, uls, design });
@@ -192,7 +196,7 @@ export function runProject(project, progress = () => {}) {
     stress: { max: stress.max, limits: stress.limits, aggressive: stress.aggressive },
     sls: { phi: sls.phi, ecs: sls.ecs, creep: sls.creep, shrinkage: sls.shrinkage, wmax: sls.wmax, wkMax: sls.wkMax,
       fields: sls.fields, iterations: sls.deflection.iterations, converged: sls.deflection.converged },
-    materials: { ...uls.mat, norm: undefined }, depths: uls.depths, design: { base: design.base },
+    materials: { ...uls.mat, norm: undefined }, params, paramChanges: diffParams(params), depths: uls.depths, design: { base: design.base },
     maps, summary,
   };
 }

@@ -1,4 +1,4 @@
-// TEK-KLUCZE — wydawanie licencji TEK-PŁYTA (offline, jeden plik HTML).
+// TEK-PLYTA-klucze — wydawanie licencji TEK-PŁYTA (offline, jeden plik HTML).
 // Para kluczy Ed25519 (WebCrypto). Klucz PRYWATNY zostaje u wydawcy (plik PEM — ten sam format co
 // scripts/license.mjs); klucz PUBLICZNY wpisuje się do programu (app/src/license-key.js).
 // Format licencji: base64url(JSON) + "." + base64url(podpis) — weryfikacja: src/app/license-core.js.
@@ -8,8 +8,10 @@ import { produkt, tektoriaCiemne } from '../../app/src/logos.js';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const S = { priv: null, pub: null, fileName: null, issued: [] };
-try { S.issued = JSON.parse(localStorage.getItem('tekklucze.rejestr') ?? '[]'); } catch { /* brak dostępu */ }
-const saveReg = () => { try { localStorage.setItem('tekklucze.rejestr', JSON.stringify(S.issued)); } catch { /* brak dostępu */ } };
+// rejestr: nowy klucz zapisu; odczyt także spod nazwy sprzed zmiany (TEK-KLUCZE, wersja 0.6)
+const REG = 'tekplyta-klucze.rejestr', REG_OLD = 'tekklucze.rejestr';
+try { S.issued = JSON.parse(localStorage.getItem(REG) ?? localStorage.getItem(REG_OLD) ?? '[]'); } catch { /* brak dostępu */ }
+const saveReg = () => { try { localStorage.setItem(REG, JSON.stringify(S.issued)); } catch { /* brak dostępu */ } };
 function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.className = `toast show${bad ? ' zly' : ''}`; setTimeout(() => { t.className = 'toast'; }, 2600); }
 function download(name, text, mime = 'text/plain') {
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type: mime })), download: name });
@@ -63,7 +65,7 @@ const ACT = {
 document.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el) Promise.resolve(ACT[el.dataset.act](el)).catch(err => toast(err.message, true)); });
 
 function render() {
-  $('#view').innerHTML = `<div class="home"><section class="hero" style="padding:2rem 1rem 1.6rem"><div class="hl">${produkt()}</div><div class="tag">TEK-KLUCZE · wydawanie licencji · offline</div><div class="hm">${tektoriaCiemne}</div></section>
+  $('#view').innerHTML = `<div class="home"><section class="hero" style="padding:2rem 1rem 1.6rem"><div class="hl">${produkt()}</div><div class="tag">TEK-PLYTA-klucze · wydawanie licencji · offline</div><div class="hm">${tektoriaCiemne}</div></section>
   <div class="grid2"><div class="card"><h2>1. Klucz wydawcy</h2>
     ${S.priv ? `<p><span class="stat ok">wczytany</span> <code>${esc(S.fileName)}</code></p><h3>Klucz publiczny <small>wpisz do app/src/license-key.js</small></h3>
       <p><code id="pub">${esc(S.pub)}</code></p><div class="btns"><button class="btn sm" data-act="copy" data-src="#pub">Kopiuj</button></div>`

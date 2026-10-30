@@ -6,6 +6,7 @@ import { defaultProject, loadGeometry, VERSION, meshArea } from '../../src/app/p
 import { CONCRETE, STEEL, NORM as EC2 } from '../../src/norms/en1992-pl.js';
 import { PSI, NORM as EC0 } from '../../src/norms/en1990-pl.js';
 import { WMAX } from '../../src/design/sls.js';
+import { resolveParams, defaultParams, diffParams, PARAM_INFO } from '../../src/norms/params.js';
 import { buildReport, renderHTML, renderDOCX, LIMITS } from '../../src/report/report.js';
 import { ProjectDB, exportProjectFile, importProjectFile } from '../../src/app/db.js';
 import { buildAIPackage, parseAIReview } from '../../src/app/ai.js';
@@ -45,7 +46,7 @@ document.addEventListener('change', e => {
   else { const n = parseFloat(String(el.value).replace(',', '.')); v = Number.isFinite(n) ? UNIT[el.dataset.unit][1](n) : null; }
   setPath(S.project, path, v);
   if (!path.startsWith('meta.')) markStale(); // dane opisowe nie zmieniają wyników
-  if (el.dataset.rerender) render();
+  if (el.dataset.rerender || path.startsWith('norms.')) { render({ bar: false }); updateName(); } // bez paska: kliknięcie zakładki po zmianie pola nie ginie
   else updateName(); // nie przebudowujemy paska: zmiana (blur) przy kliknięciu zakładki podmieniałaby przycisk pod kursorem
 });
 function markStale() { if (S.res) { S.stale = true; S.drawing = null; } }
@@ -164,7 +165,8 @@ const VIEWS = {
     h += card('Kombinacje i SGU', `<div class="form"><span>SGN (PN-EN 1990)</span><select id="formulas"><option value="ab" ${P.combination.formulas.length === 2 ? 'selected' : ''}>6.10a / 6.10b</option><option value="10" ${P.combination.formulas.length === 1 ? 'selected' : ''}>6.10</option></select>
       <span>β przy przebiciu</span>${sel('punching.beta', [['uproszczone', 'uproszczone 6.4.3(6)']])}
       <span>Wilgotność RH [%]</span>${inp('sls.RH')}<span>Cement</span>${sel('sls.cement', [['S', 'S'], ['N', 'N'], ['R', 'R']])}
-      <span>Wiek przy obciążeniu t0 [dni]</span>${inp('sls.t0')}<span>Klasa ekspozycji</span>${sel('sls.exposure', Object.keys(WMAX).map(k => [k, `${k} (wmax ${WMAX[k]} mm)`]))}</div>`);
+      <span>Wiek przy obciążeniu t0 [dni]</span>${inp('sls.t0')}<span>Klasa ekspozycji</span>${sel('sls.exposure', Object.keys(WMAX).map(k => [k, `${k} (wmax ${resolveParams(P.norms).ec2.wmax[k]} mm)`]))}</div>`);
+    h += normsCard();
     h += card('Pola do oceny ugięć <small>L/250, L/500</small>', `<p class="hint">Rozpiętość L zadaje projektant (podpowiedź: krótszy bok zaznaczenia).</p>
       <table class="mini"><tr><th>Pole</th><th>L [m]</th><th></th></tr>${P.sls.fields.map((f, i) => `<tr><td>${esc(f.label)}</td><td>${inp(`sls.fields.${i}.L`)}</td><td><button class="btn sm danger" data-act="delField" data-i="${i}">usuń</button></td></tr>`).join('')}</table>
       <button class="btn" data-act="addField">${S.pick ? 'Kliknij 2 narożniki pola na rzucie…' : 'Dodaj pole (zaznacz na rzucie)'}</button>`);
@@ -264,8 +266,8 @@ const VIEWS = {
   },
 };
 
-function render() {
-  renderBar();
+function render({ bar = true } = {}) {
+  if (bar) renderBar();
   document.body.dataset.view = S.tab;
   $('#view').innerHTML = VIEWS[S.tab]();
   const f = $('#formulas'); if (f) f.onchange = () => { S.project.combination.formulas = f.value === 'ab' ? ['6.10a', '6.10b'] : ['6.10']; markStale(); };
@@ -273,6 +275,28 @@ function render() {
   const vn = $('#variantName'); if (vn) vn.onchange = () => { S.ids.variantName = vn.value; };
   document.querySelectorAll('[data-act-layer]').forEach(c => { c.onchange = () => { c.checked ? S.hiddenLayers.delete(c.dataset.actLayer) : S.hiddenLayers.add(c.dataset.actLayer); draw(); }; });
   mountCanvas();
+}
+
+// ---------- współczynniki normowe (domyślnie normowe, edytowalne) ----------
+const getAt = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
+function pinp(path) {
+  const cur = getAt(resolveParams(S.project.norms), path), def = getAt(defaultParams(), path), changed = Math.abs(cur - def) > 1e-12;
+  return `<input type="number" step="any" data-path="norms.${path}" data-unit="num" value="${+cur.toPrecision(6)}" class="${changed ? 'changed' : ''}" title="${esc(PARAM_INFO[path]?.[1] ?? '')}">`
+    + (changed ? ` <span class="sm muted">norma: ${def}</span>` : '');
+}
+function normsCard() {
+  const rows = (paths) => paths.map(p => `<tr><td>${esc(PARAM_INFO[p]?.[0] ?? p)}</td><td class="sm muted">${esc(PARAM_INFO[p]?.[1] ?? '')}</td><td>${pinp(p)}</td></tr>`).join('');
+  const n = diffParams(resolveParams(S.project.norms)).length;
+  const D = defaultParams();
+  return card(`Współczynniki normowe <small>${n ? `${n} zmienionych` : 'wartości normowe'}</small>`, `<details ${n ? 'open' : ''}><summary>Pokaż i edytuj</summary>
+    <p class="hint">Domyślnie wartości normowe. Zmiana jest wyróżniona, a raport wymienia ją z wartością normową.</p>
+    <h3>PN-EN 1990 — kombinacje</h3><table class="mini">${rows(['ec0.gammaGsup', 'ec0.gammaGinf', 'ec0.gammaQ', 'ec0.xi'])}</table>
+    <h3>ψ0 / ψ1 / ψ2 (tabl. A1.1)</h3><table class="mini"><tr><th>Kat.</th><th>ψ0</th><th>ψ1</th><th>ψ2</th></tr>${Object.keys(D.ec0.psi).map(k => `<tr><td><code>${k}</code></td>${['psi0', 'psi1', 'psi2'].map(j => `<td>${pinp(`ec0.psi.${k}.${j}`)}</td>`).join('')}</tr>`).join('')}</table>
+    <h3>PN-EN 1992-1-1 — materiały i nośność</h3><table class="mini">${rows(['ec2.gammaC', 'ec2.gammaS', 'ec2.alphaCC', 'ec2.alphaCT', 'ec2.Es', 'ec2.CRdcNum', 'ec2.vminCoef', 'ec2.k1', 'ec2.vRdMaxCoef', 'ec2.rhoMax'])}</table>
+    <h3>Przebicie — β uproszczone</h3><table class="mini">${rows(['ec2.betaPunch.wewnetrzny', 'ec2.betaPunch.krawedziowy', 'ec2.betaPunch.narozny'])}</table>
+    <h3>Rysy, naprężenia, ugięcia</h3><table class="mini">${rows(['ec2.crack.k1', 'ec2.crack.k2', 'ec2.crack.k3', 'ec2.crack.k4', 'ec2.crack.kt', 'ec2.stress.k1', 'ec2.stress.k2', 'ec2.stress.k3', 'ec2.defl.betaLong', 'ec2.defl.betaShort'])}</table>
+    <h3>wmax (tabl. 7.1N) [mm]</h3><table class="mini">${rows(Object.keys(D.ec2.wmax).map(k => `ec2.wmax.${k}`))}</table>
+    <div class="btns"><button class="btn" data-act="resetNorms" ${n ? '' : 'disabled'}>Przywróć wartości normowe</button></div></details>`);
 }
 
 // ---------- mapy ----------
@@ -452,6 +476,7 @@ const ACTIONS = {
     Object.assign(S.ids, r); await persistDb(); toast('Zapisano w bazie.'); render();
   },
   saveNewVariant(el) { const n = prompt('Nazwa nowego wariantu:', `${S.ids.variantName} (2)`); if (!n) return; S.ids.variantName = n; return ACTIONS.saveVariant(el, true); },
+  resetNorms() { if (!confirm('Przywrócić wszystkie wartości normowe?')) return; S.project.norms = {}; markStale(); render(); },
   newProject() {
     if (S.geo && !confirm('Nowy projekt? Niezapisane zmiany zostaną utracone.')) return;
     S.project = defaultProject(); S.geo = null; S.res = null; S.dxfName = null; S.drawing = null; S.ids = { projectId: null, variantId: null, variantName: 'wariant 1' }; fittedFor = null; S.tab = 'geo'; render();

@@ -19,7 +19,7 @@ const distToPolyline = (p, pts, closed) => {
 export function vRdc({ d, rho, mat }) {
   const dmm = d * 1000, k = Math.min(2, 1 + Math.sqrt(200 / dmm));
   const r = Math.min(0.02, rho), CRdc = mat.norm.CRdc(mat.gammaC);
-  const v = Math.max(CRdc * k * Math.cbrt(100 * r * mat.fck), 0.035 * k ** 1.5 * Math.sqrt(mat.fck)); // MPa
+  const v = Math.max(CRdc * k * Math.cbrt(100 * r * mat.fck), (mat.norm.vminCoef ?? 0.035) * k ** 1.5 * Math.sqrt(mat.fck)); // MPa
   return { vRd: v * dmm, v, k, rho: r }; // vRd [kN/m] = MPa · mm
 }
 

@@ -10,7 +10,7 @@ zapis rozmowy z etapów 1–3 w `docs/chat-cowork.docx`.
 - `TEK-PLYTA-setup-<wersja>.exe` — instalator z jednego pliku (bez uprawnień administratora,
   `%LOCALAPPDATA%\Programs\TEK-PLYTA`, skróty w Menu Start i na pulpicie, deinstalator);
 - `TEK-PLYTA-<wersja>-przenosna.exe` — wersja przenośna (bez instalacji);
-- `TEK-KLUCZE.html` — osobna aplikacja do wydawania licencji (offline, otwierana w przeglądarce).
+- `TEK-PLYTA-klucze.html` — osobna aplikacja do wydawania licencji (offline, otwierana w przeglądarce).
 
 Wymaga WebView2 (wbudowany w Windows 11, w Windows 10 instalowany z aktualizacjami).
 Baza projektów: `Dokumenty\TEK-PLYTA\tekplyta.db` (deinstalacja jej nie usuwa).
@@ -29,7 +29,7 @@ zapis w bazie) → 8. AI (paczka do sprawdzenia).
 
 ```
 npm test          # 103 testy: wzorce MES, EC2 (obliczenia ręczne), dobór prętów, DXF, raport, baza, licencja
-npm run test:ui   # interfejs w Chromium + TEK-KLUCZE (Playwright)
+npm run test:ui   # interfejs w Chromium + TEK-PLYTA-klucze (Playwright)
 node tools/export-case.mjs cc.json && python3 tools/cross-check.py cc.json   # niezależny MES xdfem2d
 ```
 
@@ -37,7 +37,7 @@ Zestawienie zgodności: [docs/weryfikacja.md](docs/weryfikacja.md) (DKT vs xdfem
 
 ## Licencje (sprzedaż)
 
-Klucz Ed25519 sprawdzany offline. **TEK-KLUCZE.html**: „Wygeneruj nową parę” (raz) — zapisuje klucz prywatny
+Klucz Ed25519 sprawdzany offline. **TEK-PLYTA-klucze.html**: „Wygeneruj nową parę” (raz) — zapisuje klucz prywatny
 (PEM; przechowuj poza komputerem roboczym, z kopią) i pokazuje klucz publiczny. Klucz publiczny wpisz do
 `app/src/license-key.js` (zamiast `null`) i zbuduj program. Licencje dla klientów: „Wczytaj klucz prywatny”
 → „Wystaw”. To samo z wiersza poleceń: `node scripts/license.mjs keygen|issue` (ten sam format PEM).
@@ -76,7 +76,7 @@ Bez klucza publicznego (stan obecny) program działa, a raport ma dopisek „wer
 | `neutralino.config.json`, `.github/workflows/exe.yml` | okno .exe (Neutralinojs 6.10.0) i jego budowa w GitHub Actions |
 | `src/design/rebar.js`, `shear.js` | dobór prętów (dodatki w rozstawie siatki, strefy stopniowane, lbd, 9.4.3), ścinanie 6.2.2 |
 | `src/cad/` | zapis DXF R12 i rysunek zbrojenia |
-| `tools/klucze/`, `installer/` | TEK-KLUCZE (licencje) i instalator NSIS |
+| `tools/klucze/`, `installer/` | TEK-PLYTA-klucze (licencje) i instalator NSIS |
 | `tools/export-case.mjs`, `tools/cross-check.py` | porównanie z niezależnym MES xdfem2d |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |

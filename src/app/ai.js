@@ -58,6 +58,7 @@ export function modelSummary(project, res) {
     przebicie: res.punching.map(p => ({ slup: p.label, typ: p.type, VEd_kN: r1(p.VEd), beta: p.beta, u1_m: r1(p.u1), d_m: r1(p.d), vEd_MPa: r1(p.vEd), vRdc_MPa: r1(p.vRdc), wykorzystanie: r1(p.util), vEd0_do_vRdmax: r1(p.utilMax) })),
     sgu: { phi: r1(res.sls.phi), eps_cs: r1(res.sls.ecs), w_max_dlugotrwale_m: r1(res.summary.wLtMax), wk_max_mm: r1(res.sls.wkMax), wmax_mm: res.sls.wmax,
       pola: res.sls.fields.map(f => ({ pole: f.label, L_m: f.L, w_mm: r1(f.w * 1000), dw_mm: r1(f.dw * 1000), spelnia: f.ok })) },
+    zmienione_wspolczynniki: (res.paramChanges ?? []).map(c => ({ wspolczynnik: c.symbol, punkt: c.clause, normowa: c.normative, przyjeta: c.adopted })),
     ostrzezenia: res.warnings.map(w => w.msg),
   };
 }

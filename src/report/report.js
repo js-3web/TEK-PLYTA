@@ -19,6 +19,8 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
   const table = (head, rows) => B.push({ type: 'table', head, rows });
   const img = (key, caption) => { if (images[key]) B.push({ type: 'img', ...images[key], caption }); };
   const m = res.materials, s = project.slab, r = project.reinf, meta = project.meta ?? {};
+  // współczynniki przyjęte w obliczeniach (domyślnie normowe; zmiany projektanta — tabela niżej)
+  const P0 = res.params?.ec0 ?? { ...EC0, psi: PSI }, P2 = res.params?.ec2 ?? EC2;
 
   // --- strona tytułowa ---
   B.push({ type: 'title', lines: [
@@ -35,11 +37,16 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
   p('Normy: PN-EN 1990:2004 + NA (kombinacje), PN-EN 1991-1-1 (kategorie obciążeń użytkowych), PN-EN 1992-1-1:2008 + NA (wymiarowanie).');
   if (!EC0.verified || !EC2.verified)
     note('Status wartości krajowych: część parametrów (γc = 1,4; αcc = 1,0; ψ0/ψ1/ψ2 — wartości zalecane EN 1990 tabl. A1.1; współczynnik 0,4 w vRd,max; zał. B; tabl. 7.1N) nie została porównana z tekstem Załączników Krajowych. Projektant potwierdza je przed wykorzystaniem obliczeń.');
+  h2('Współczynniki normowe');
+  if (res.paramChanges?.length) {
+    note('Projektant zmienił poniższe współczynniki względem wartości normowych. Pozostałe — wartości normowe.');
+    table(['Współczynnik', 'Punkt normy', 'Wartość normowa', 'Przyjęta'], res.paramChanges.map(c => [c.symbol, c.clause, f(c.normative, 3), f(c.adopted, 3)]));
+  } else p('Przyjęto wartości normowe wszystkich współczynników (bez zmian projektanta).');
   h2('Materiały');
   table(['Parametr', 'Wartość', 'Źródło'], [
-    ['Beton', s.concrete, 'tabl. 3.1'], ['fck / fcd', `${f(m.fck, 0)} / ${f(m.fcd)} MPa`, `3.1.6(1), αcc = ${f(EC2.alphaCC, 1)}, γc = ${f(EC2.gammaC, 1)}`],
+    ['Beton', s.concrete, 'tabl. 3.1'], ['fck / fcd', `${f(m.fck, 0)} / ${f(m.fcd)} MPa`, `3.1.6(1), αcc = ${f(P2.alphaCC, 2)}, γc = ${f(P2.gammaC, 2)}`],
     ['fctm / Ecm', `${f(m.fctm, 1)} MPa / ${f(m.Ecm, 0)} GPa`, 'tabl. 3.1'],
-    ['Stal', s.steel, ''], ['fyk / fyd', `${f(m.fyk, 0)} / ${f(m.fyd, 1)} MPa`, `γs = ${f(EC2.gammaS, 2)}`],
+    ['Stal', s.steel, ''], ['fyk / fyd', `${f(m.fyk, 0)} / ${f(m.fyd, 1)} MPa`, `γs = ${f(P2.gammaS, 2)}`],
   ]);
   h2('Płyta i zbrojenie podstawowe');
   const mm = v => f(v * 1000, 0);
@@ -54,9 +61,9 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
   h2('Obciążenia (wartości charakterystyczne) i kombinacje');
   const loadRows = [['G0', 'ciężar własny', 'G', '—']];
   for (const [k, L] of Object.entries(project.loads)) if (res.cases.includes(k))
-    loadRows.push([k, `${f(L.value)} ${k[0] === 'Q' ? 'kN/m²' : k[0] === 'L' ? 'kN/m' : 'kN'}`, L.type, L.type === 'Q' ? `${L.category} (ψ0 = ${f(PSI[L.category].psi0, 1)}, ψ1 = ${f(PSI[L.category].psi1, 1)}, ψ2 = ${f(PSI[L.category].psi2, 1)})` : '—']);
+    loadRows.push([k, `${f(L.value)} ${k[0] === 'Q' ? 'kN/m²' : k[0] === 'L' ? 'kN/m' : 'kN'}`, L.type, L.type === 'Q' ? `${L.category} (ψ0 = ${f(P0.psi[L.category].psi0, 2)}, ψ1 = ${f(P0.psi[L.category].psi1, 2)}, ψ2 = ${f(P0.psi[L.category].psi2, 2)})` : '—']);
   table(['Przypadek', 'Wartość', 'Typ', 'Kategoria (tabl. A1.1)'], loadRows);
-  p(`SGN (STR): ${(project.combination?.formulas ?? ['6.10a', '6.10b']).join(' i ')}; γG,sup = ${f(EC0.gammaGsup)}, γG,inf = ${f(EC0.gammaGinf)}, γQ = ${f(EC0.gammaQ)}, ξ = ${f(EC0.xi)}. Każda strefa obciążenia zmiennego włączana lub wyłączana niezależnie (obwiednia układów szachownicowych). SGU: kombinacja quasi-stała (ugięcia, rysy).`);
+  p(`SGN (STR): ${(project.combination?.formulas ?? ['6.10a', '6.10b']).join(' i ')}; γG,sup = ${f(P0.gammaGsup)}, γG,inf = ${f(P0.gammaGinf)}, γQ = ${f(P0.gammaQ)}, ξ = ${f(P0.xi)}. Każda strefa obciążenia zmiennego włączana lub wyłączana niezależnie (obwiednia układów szachownicowych). SGU: kombinacja quasi-stała (ugięcia, rysy).`);
 
   // --- 2. Model ---
   B.push({ type: 'pagebreak' });
@@ -115,7 +122,7 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
       `vEd = β·VEd/(u1·d) = ${f(worst.beta)}·${f(worst.VEd * 1000, 0)}/(${f(worst.u1 * 1000, 0)}·${f(worst.d * 1000, 0)}) = ${f(worst.vEd, 3)} MPa   (6.38)`,
       `k = 1 + √(200/d) = ${f(worst.k, 3)} ≤ 2,0;  ρl = √(ρlx·ρly) = ${f(worst.rho * 100, 3)} % ≤ 2 %`,
       `vRd,c = CRd,c·k·(100·ρl·fck)^(1/3) = ${f(worst.CRdc, 4)}·${f(worst.k, 3)}·(100·${f(worst.rho, 5)}·${f(m.fck, 0)})^(1/3) ≥ vmin = ${f(worst.vmin, 3)} → vRd,c = ${f(worst.vRdc, 3)} MPa   (6.47)`,
-      `ν = 0,6·(1 − fck/250) = ${f(worst.nu, 3)};  vRd,max = ${f(EC2.vRdMaxCoef, 1)}·ν·fcd = ${f(worst.vRdMax, 3)} MPa;  vEd,0 = β·VEd/(u0·d) = ${f(worst.vEd0, 3)} MPa   (6.4.5(3))`,
+      `ν = 0,6·(1 − fck/250) = ${f(worst.nu, 3)};  vRd,max = ${f(P2.vRdMaxCoef, 2)}·ν·fcd = ${f(worst.vRdMax, 3)} MPa;  vEd,0 = β·VEd/(u0·d) = ${f(worst.vEd0, 3)} MPa   (6.4.5(3))`,
       `Wykorzystanie: vEd/vRd,c = ${f(worst.util)}`,
     ];
     if (worst.shearReinforcement) lines.push(`Zbrojenie (6.52), strzemiona pionowe, sr = 0,75d: fywd,ef = 250 + 0,25·d = ${f(worst.shearReinforcement.fywdEf, 0)} MPa; Asw = (vEd − 0,75·vRd,c)·u1·d/(1,5·(d/sr)·fywd,ef) = ${f(worst.shearReinforcement.AswPerPerimeter, 0)} mm² na obwód; uout,ef = β·VEd/(vRd,c·d) = ${f(worst.shearReinforcement.uOutEf, 2)} m (6.54). Konstrukcja wg 9.4.3.`);

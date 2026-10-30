@@ -18,7 +18,7 @@ import { controlPerimeter, punchingCheck, BETA_SIMPLIFIED } from './punching.js'
 const LAYERS = [['bottomX', 'bottom', 'x'], ['bottomY', 'bottom', 'y'], ['topX', 'top', 'x'], ['topY', 'top', 'y']];
 
 export function designSlab({ geo, mesh, env, design }) {
-  const mat = designMaterials(design.concrete, design.steel);
+  const mat = designMaterials(design.concrete, design.steel, design.norm); // norm: współczynniki (src/norms/params.js)
   const dd = effectiveDepths(design);
   const peak = designMomentEnvelope(env.fields.nodes, env.schemes.ULS);
   const N = mesh.nodes.length, warnings = [];
@@ -68,7 +68,7 @@ export function designSlab({ geo, mesh, env, design }) {
     if (!sup) continue;
     const cp = controlPerimeter(col, geo, dTop);
     if (cp.reentrant) warnings.push({ code: 'przebicie-naroze-wklesle', msg: `Słup ${col.label}: przy narożu wklęsłym płyty — norma go nie opisuje; przyjęto β i u0 jak dla słupa krawędziowego. Sprawdź.` });
-    const beta = typeof design.punching?.beta === 'number' ? design.punching.beta : BETA_SIMPLIFIED[cp.type];
+    const beta = typeof design.punching?.beta === 'number' ? design.punching.beta : (mat.norm.betaPunch ?? BETA_SIMPLIFIED)[cp.type];
     const extra = design.punching?.extraTop?.[col.label] ?? { x: 0, y: 0 };
     const rhoX = ((design.base?.top?.x ?? 0) + extra.x) / (1000 * dd.top.x * 1000);
     const rhoY = ((design.base?.top?.y ?? 0) + extra.y) / (1000 * dd.top.y * 1000);
