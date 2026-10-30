@@ -6,43 +6,41 @@ zapis rozmowy z etapów 1–3 w `docs/chat-cowork.docx`.
 
 ## Jak używać
 
-**Program dla Windows (.exe):** zakładka *Actions* w GitHubie → przebieg „exe” → artefakt
-**TEK-PLYTA-windows** (plik `TEK-PLYTA-win_x64.exe`). Program działa offline, bez instalatora; wymaga
-WebView2 (wbudowany w Windows 11, w Windows 10 instalowany z aktualizacjami). Baza projektów:
-`Dokumenty/TEK-PLYTA/tekplyta.db`.
+**Windows:** GitHub → zakładka *Actions* → przebieg „exe” → artefakt **TEK-PLYTA-windows**:
+- `TEK-PLYTA-setup-<wersja>.exe` — instalator z jednego pliku (bez uprawnień administratora,
+  `%LOCALAPPDATA%\Programs\TEK-PLYTA`, skróty w Menu Start i na pulpicie, deinstalator);
+- `TEK-PLYTA-<wersja>-przenosna.exe` — wersja przenośna (bez instalacji);
+- `TEK-KLUCZE.html` — osobna aplikacja do wydawania licencji (offline, otwierana w przeglądarce).
 
-**Wersja robocza w przeglądarce** (Node.js 22+):
+Wymaga WebView2 (wbudowany w Windows 11, w Windows 10 instalowany z aktualizacjami).
+Baza projektów: `Dokumenty\TEK-PLYTA\tekplyta.db` (deinstalacja jej nie usuwa).
+
+**Wersja robocza w przeglądarce** (Node.js 22+): `npm ci`, `npm start`, http://localhost:8080.
+
+**Kolejność pracy (zakładki):** Start (projekty) → 1. Geometria (wzorzec DXF, ZWCAD, DXF 2010, kontrola rysunku)
+→ 2. Dane (grubość, beton, siatki #ϕ co s, obciążenia z kategoriami, podpory, SGU, pola ugięć z L)
+→ 3. Obliczenia (h0, „Licz”, kontrola równowagi) → 4. Wyniki (mapy: ugięcia, momenty SGN/SGU, siły
+poprzeczne, zbrojenie, rysy, naprężenia) → 5. Zbrojenie (dobrane pręty: siatka + dodatki w strefach,
+przebicie 9.4.3, ścinanie 6.2.2, naprężenia 7.2, rysy i ugięcia na zbrojeniu dobranym) → 6. Rysunek
+(DXF R12 dla ZWCAD: rzut dolny i górny, pręty reprezentatywne, rozkład, opisy) → 7. Raport (PDF, DOCX;
+zapis w bazie) → 8. AI (paczka do sprawdzenia).
+
+## Testy i weryfikacja
 
 ```
-npm ci
-npm start
+npm test          # 103 testy: wzorce MES, EC2 (obliczenia ręczne), dobór prętów, DXF, raport, baza, licencja
+npm run test:ui   # interfejs w Chromium + TEK-KLUCZE (Playwright)
+node tools/export-case.mjs cc.json && python3 tools/cross-check.py cc.json   # niezależny MES xdfem2d
 ```
 
-i otwórz http://localhost:8080. Baza projektów w przeglądarce: IndexedDB.
-
-**Kolejność pracy:** Geometria (pobierz wzorzec DXF, narysuj w ZWCAD, zapisz jako DXF 2010, wczytaj)
-→ Dane (grubość, beton, siatki, obciążenia z kategoriami, podpory, SGU, pola ugięć z L)
-→ Siatka (h0, „Licz”) → Wyniki (mapy, kontrola równowagi) → Wymiarowanie (zginanie, przebicie,
-ugięcia, rysy) → Raport (PDF przez „Drukuj”, DOCX) → Projekty (baza, warianty, plik .tekplyta)
-→ AI (paczka do sprawdzenia w Twoim narzędziu AI, import uwag).
-
-## Testy
-
-```
-npm test          # 89 testów obliczeniowych (wzorce, normy, raport, baza, licencja)
-npm run test:ui   # test interfejsu w przeglądarce (Playwright + Chromium)
-```
+Zestawienie zgodności: [docs/weryfikacja.md](docs/weryfikacja.md) (DKT vs xdfem2d: 0,00 %).
 
 ## Licencje (sprzedaż)
 
-Klucz Ed25519 sprawdzany offline. Wydawca (tylko na swoim komputerze, klucz prywatny POZA repozytorium):
-
-```
-node scripts/license.mjs keygen C:/klucze-tekplyta
-```
-
-Wypisany klucz publiczny wpisz do `app/src/license-key.js` (zamiast `null`) i zbuduj program.
-Klucz dla klienta: `node scripts/license.mjs issue C:/klucze-tekplyta/tekplyta-private.pem "Firma X" 2027-12-31`.
+Klucz Ed25519 sprawdzany offline. **TEK-KLUCZE.html**: „Wygeneruj nową parę” (raz) — zapisuje klucz prywatny
+(PEM; przechowuj poza komputerem roboczym, z kopią) i pokazuje klucz publiczny. Klucz publiczny wpisz do
+`app/src/license-key.js` (zamiast `null`) i zbuduj program. Licencje dla klientów: „Wczytaj klucz prywatny”
+→ „Wystaw”. To samo z wiersza poleceń: `node scripts/license.mjs keygen|issue` (ten sam format PEM).
 Bez klucza publicznego (stan obecny) program działa, a raport ma dopisek „wersja bez licencji”.
 
 ## Struktura
@@ -76,9 +74,13 @@ Bez klucza publicznego (stan obecny) program działa, a raport ma dopisek „wer
 | `app/` | interfejs: `index.html`, `src/main.js` (moduły), `src/worker.js` (obliczenia w tle), `src/render.js` (mapy) |
 | `scripts/` | `build.mjs` (esbuild), `serve.mjs` (serwer roboczy), `e2e.cjs` (test UI), `license.mjs` |
 | `neutralino.config.json`, `.github/workflows/exe.yml` | okno .exe (Neutralinojs 6.10.0) i jego budowa w GitHub Actions |
+| `src/design/rebar.js`, `shear.js` | dobór prętów (dodatki w rozstawie siatki, strefy stopniowane, lbd, 9.4.3), ścinanie 6.2.2 |
+| `src/cad/` | zapis DXF R12 i rysunek zbrojenia |
+| `tools/klucze/`, `installer/` | TEK-KLUCZE (licencje) i instalator NSIS |
+| `tools/export-case.mjs`, `tools/cross-check.py` | porównanie z niezależnym MES xdfem2d |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 89 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 103 testy: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 

@@ -1,5 +1,6 @@
-# Budowa aplikacji Windows (.exe, Neutralino) — przy pushu, tagu v* albo ręcznie z zakładki Actions.
-# Wynik: artefakt „TEK-PLYTA-windows” (plik .exe z wbudowanymi zasobami). Testy muszą przejść przed budową.
+# Budowa programu dla Windows — przy pushu, tagu v* albo ręcznie z zakładki Actions.
+# Artefakt „TEK-PLYTA-windows”: instalator z jednego pliku (NSIS), wersja przenośna .exe i TEK-KLUCZE.html.
+# Testy (w tym porównanie z niezależnym MES) muszą przejść przed budową.
 name: exe
 on:
   workflow_dispatch:
@@ -21,12 +22,21 @@ jobs:
         run: npx --yes @neutralinojs/neu@11.8.0 update || npx --yes @neutralinojs/neu@11.8.0 update --latest
       - name: Budowa .exe z wbudowanymi zasobami
         run: npx --yes @neutralinojs/neu@11.8.0 build --release --embed-resources
-      - name: Zawartość dist
-        run: ls -laR dist
+      - name: Instalator (NSIS)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q nsis
+          VERSION=$(node -p "require('./package.json').version")
+          cd installer && makensis -V2 -DVERSION=$VERSION -DSRC=../dist/TEK-PLYTA -DOUT=../dist tekplyta.nsi
+      - name: Pakiet wynikowy
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p out
+          cp dist/TEK-PLYTA-setup-$VERSION.exe out/
+          cp dist/TEK-PLYTA/TEK-PLYTA-win_x64.exe out/TEK-PLYTA-$VERSION-przenosna.exe
+          cp dist-tools/TEK-KLUCZE.html out/
+          ls -la out
       - uses: actions/upload-artifact@v4
         with:
           name: TEK-PLYTA-windows
-          path: |
-            dist/TEK-PLYTA/TEK-PLYTA-win_x64.exe
-            dist/TEK-PLYTA/resources.neu
+          path: out/
           if-no-files-found: error
