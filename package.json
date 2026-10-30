@@ -1,6 +1,6 @@
 {
   "name": "tek-plyta",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "TEK-PLYTA — MES płyt żelbetowych wg PN-EN 1992-1-1 (TEKTORIA)",
   "type": "module",
   "private": true,

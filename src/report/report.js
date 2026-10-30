@@ -81,7 +81,25 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
       const base = res.design.base[k.startsWith('bottom') ? 'bottom' : 'top'][k.endsWith('X') ? 'x' : 'y'];
       return [LAYER[k], f(v, 0), f(base, 0), v > base + 0.5 ? 'tak' : 'nie'];
     }));
-  for (const k of ['bottomX', 'bottomY', 'topX', 'topY']) img(`dAs_${k}`, `Dozbrojenie ponad siatkę — ${LAYER[k]} [mm²/m]`);
+  // dobór prętów: dodatki w rozstawie siatki, strefy stopniowane (zagnieżdżone), długość z al = d i lbd (8.4)
+  if (res.rebar) {
+    h2('Dobór prętów');
+    p('Pręty dodatkowe w rozstawie siatki podstawowej, wkładane między jej pręty (katalog ϕ8–ϕ25). Strefy stopniowane — w strefie wewnętrznej mocniejszy pręt zastępuje słabszy. Długość strefy: obszar ΔAs > 0 wydłużony o al = d (9.2.1.3(2)) i lbd (8.4.3–8.4.4, σsd = fyd, α = 1). Rozstaw maksymalny 9.3.1.1(3).');
+    const fb = b => (!b || b.fail ? 'brak — zwiększ siatkę/grubość' : b.perSpacing === 2 ? `2×#${b.phi} co ${b.s * 2}` : `#${b.phi} co ${b.s}`);
+    const rows = [];
+    for (const [k, L] of Object.entries(res.rebar.layers)) {
+      rows.push([LAYER[k], `siatka #${L.base.phi} co ${L.base.s} (${f(L.base.As, 0)} mm²/m)`, '—', '—', '—', '—']);
+      for (const z of L.zones) rows.push([LAYER[k], `+${fb(z.bar)}${z.tier > 1 ? ` (stopień ${z.tier})` : ''}`, `${f(z.rect.x0)}–${f(z.rect.x1)}`, `${f(z.rect.y0)}–${f(z.rect.y1)}`, f(z.length * 1000, 0), z.lbd ? f(z.lbd, 0) : '—']);
+    }
+    table(['Warstwa', 'Pręty', 'x [m]', 'y [m]', 'L [mm]', 'lbd [mm]'], rows);
+    for (const k of ['bottomX', 'bottomY', 'topX', 'topY']) img(`Asp_${k}`, `Zbrojenie zapewnione (siatka + dodatki) — ${LAYER[k]} [mm²/m], strefy przerywane`);
+    if (res.rebar.punching.length) {
+      h2('Zbrojenie na przebicie (9.4.3)');
+      table(['Słup', 'Strzemiona', 'Obwody', 'Gałęzie na obwodach', 's0 / sr [mm]', 'Zasięg uout,ef od lica [m]'],
+        res.rebar.punching.map(x => [x.label, x.fail ? 'brak' : `#${x.phi}`, String(x.nPerimeters ?? '—'), x.perimeters ? x.perimeters.map(q => q.legs).join(' / ') : (x.msg ?? ''), x.s0 ? `${f(x.s0 * 1000, 0)} / ${f(x.sr * 1000, 0)}` : '—', x.rOut ? f(x.rOut) : '—']));
+      p('Obwody od s0 ≤ 0,5d co sr ≤ 0,75d do odległości 1,5d wewnątrz uout,ef (6.4.5(4)); odstęp gałęzi w obwodzie ≤ 1,5d w obrębie u1, ≤ 2d dalej; Asw,min wg (9.11).');
+    }
+  } else for (const k of ['bottomX', 'bottomY', 'topX', 'topY']) img(`dAs_${k}`, `Dozbrojenie ponad siatkę — ${LAYER[k]} [mm²/m]`);
 
   h1('5. Przebicie (6.4)');
   p('VEd z obwiedni SGN reakcji słupów (bez redukcji o obciążenie wewnątrz obwodu). Obwód u1 w odległości 2d, z uwzględnieniem krawędzi (rys. 6.13–6.15) i otworów ≤ 6d (rys. 6.14). β — wartości uproszczone 6.4.3(6); projektant potwierdza spełnienie warunków ich stosowania.');
@@ -106,13 +124,26 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
 
   // --- 6. SGU ---
   B.push({ type: 'pagebreak' });
+  if (res.shear) {
+    h2('Ścinanie poza strefami przebicia (6.2.2)');
+    p(`vEd = √(vx² + vy²) z obwiedni SGN; vRd,c = [CRd,c·k·(100·ρl·fck)^(1/3)]·d ≥ vmin·d przy zbrojeniu zapewnionym (mniejsze z ρ dołu i góry). Pominięte węzły bliżej niż d od podpór liniowych (6.2.1(8)) i 2d od słupów i sił skupionych (przebicie). Przy podporach liniowych vEd × 1,05 (zapas metody). Największe wykorzystanie: ${f(res.shear.maxUtil)}${res.shear.maxUtil > 1 ? ' — NIE SPEŁNIA (potrzebne zbrojenie na ścinanie lub zmiana przekroju).' : ' — spełnia.'}`);
+    img('shearUtil', 'Ścinanie 6.2.2: vEd / vRd,c (szare — poza zakresem kontroli)');
+  }
   h1('6. Ugięcia i rysy (SGU)');
   p(`Ugięcia metodą 7.4.3 w MES: kombinacja quasi-stała, Ec,eff = Ecm/(1 + φ), φ(∞,t0) = ${f(res.sls.phi)} (zał. B; RH = ${project.sls.RH} %, t0 = ${project.sls.t0} dni, cement ${project.sls.cement}), w każdym elemencie sztywność interpolowana między fazą I i II (ζ = 1 − β(Mcr/M)², β = 0,5) przy zbrojeniu zapewnionym; skurcz εcs = ${f(res.sls.ecs * 1000, 3)} ‰ jako krzywizna (7.21). Iteracja: ${res.sls.iterations} kroków${res.sls.converged ? '' : ' (BRAK ZBIEŻNOŚCI)'}.`);
   img('w_lt', 'Ugięcie długotrwałe [mm]');
   if (res.sls.fields.length) table(['Pole', 'L [m]', 'w [mm]', 'L/250 [mm]', 'Δw [mm]', 'L/500 [mm]', 'Wynik'],
     res.sls.fields.map(x => [x.label, f(x.L), f(x.w * 1000, 1), f(x.wLim * 1000, 1), f(x.dw * 1000, 1), f(x.dwLim * 1000, 1), x.error ?? (x.ok ? 'spełnia' : 'NIE SPEŁNIA')]));
   else note('Nie wskazano pól do oceny ugięć (L zadaje projektant) — ocena L/250 i L/500 niewykonana.');
-  p(`Rysy (7.3.4), kombinacja quasi-stała: wk,max = ${f(res.sls.wkMax)} mm, wmax = ${f(res.sls.wmax, 1)} mm → ${res.sls.wkMax <= res.sls.wmax ? 'spełnia' : 'NIE SPEŁNIA'}.`);
+  p(`Rysy (7.3.4), kombinacja quasi-stała, zbrojenie zapewnione: wk,max = ${f(res.sls.wkMax)} mm, wmax = ${f(res.sls.wmax, 1)} mm → ${res.sls.wkMax <= res.sls.wmax ? 'spełnia' : 'NIE SPEŁNIA'}.`);
+  if (res.stress) {
+    const st = res.stress;
+    table(['Ograniczenie naprężeń (7.2)', 'Wartość max [MPa]', 'Granica [MPa]', 'Wynik'], [
+      ['σs, kombinacja charakterystyczna (7.2(5))', f(st.max.sigS, 0), f(st.limits.sigS, 0), st.max.sigS <= st.limits.sigS ? 'spełnia' : 'NIE SPEŁNIA'],
+      ['σc, kombinacja charakterystyczna (7.2(2))', f(st.max.sigC, 1), f(st.limits.sigCchar, 1), st.aggressive ? (st.max.sigC <= st.limits.sigCchar ? 'spełnia' : 'NIE SPEŁNIA') : 'informacyjnie (wymagane przy XD/XF/XS)'],
+      ['σc, kombinacja quasi-stała (7.2(3))', f(st.max.sigCqp, 1), f(st.limits.sigCqp, 1), st.max.sigCqp <= st.limits.sigCqp ? 'pełzanie liniowe' : 'pełzanie nieliniowe'],
+    ]);
+  }
 
   // --- 7. Wnioski ---
   h1('7. Wnioski');
@@ -139,6 +170,8 @@ export const LIMITS = [
   'Δw po wykonaniu wykończeń przybliżone jako w całkowite − w natychmiastowe od G.',
   'Rozpiętość L w L/250 i L/500 zadaje projektant — błędna rozpiętość odniesienia = błędna ocena.',
   'Przebicie: VEd bez redukcji o obciążenie wewnątrz obwodu; otwory bez złagodzenia √(l1·l2); słup przy narożu wklęsłym traktowany jak krawędziowy (norma tego przypadku nie opisuje).',
+  'Siły poprzeczne z równowagi (gradient momentów węzłowych): w pojedynczych węzłach rozrzut do ±8 %, średnio < 2 %; kontrola 6.2.2 bierze maksimum z otoczenia węzła, przy podporach liniowych × 1,05.',
+  'Dobór prętów: dodatki w rozstawie siatki, najwyżej 3 stopnie na warstwę, strefy prostokątne wzdłuż prętów; projektant ocenia wykonawczość i może zmienić siatkę.',
   'Stała grubość, bez belek i głowic; brak pożaru, dynamiki, sprężenia, etapów budowy.',
   'Norma pierwszej generacji (PN-EN 1992-1-1:2008); PN-EN 1992-1-1:2024 w wersji 2.',
 ];

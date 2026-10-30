@@ -118,7 +118,7 @@ function readEntities(pairs, out, skipped, warnings) {
       case 'TEXT': {
         // przy wyrównaniu innym niż domyślne (72/73 != 0) obowiązuje punkt 11/21
         const aligned = (get(72, '0') !== '0' || get(73, '0') !== '0') && get(11) != null;
-        out.push({ type: 'TEXT', layer, p: aligned ? [num(11), num(21)] : [num(10), num(20)], text: cleanText(get(1, '')) });
+        out.push({ type: 'TEXT', layer, p: aligned ? [num(11), num(21)] : [num(10), num(20)], text: cleanText(get(1, '')), h: num(40, 0), rot: num(50, 0) });
         break;
       }
       case 'MTEXT': {

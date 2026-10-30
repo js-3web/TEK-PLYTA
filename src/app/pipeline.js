@@ -28,7 +28,7 @@ import { checkShear } from '../design/shear.js';
 import { selectRebar } from '../design/rebar.js';
 import { CONCRETE } from '../norms/en1992-pl.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 
 // Domyślny projekt — wartości startowe formularzy (projektant zmienia)
 export function defaultProject() {

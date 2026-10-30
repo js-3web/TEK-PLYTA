@@ -20,7 +20,7 @@ export function bboxOf(pts) {
   return b;
 }
 
-const C = { bg: '#0b1622', outline: '#e6edf5', hole: '#9fb3c8', column: '#e5484d', wall: '#46a758', edge: '#3fb6d9', area: 'rgba(80,140,255,0.16)', areaLine: '#5b8cff', line: '#f5a524', point: '#ffd43b', text: '#c9d6e3', err: '#ff4d4f', field: '#c084fc' };
+const C = { bg: '#ffffff', outline: '#1d1d1b', hole: '#6f6e64', column: '#c0392b', wall: '#2a6a3e', edge: '#0A8FB0', area: 'rgba(26,77,92,0.07)', areaLine: '#1a4d5c', line: '#b26b00', point: '#9a6300', text: '#3a3a36', err: '#c62828', field: '#7b3fb0' };
 
 function poly(ctx, view, pts, closed = true) {
   ctx.beginPath();
@@ -28,7 +28,7 @@ function poly(ctx, view, pts, closed = true) {
   if (closed) ctx.closePath();
 }
 function label(ctx, view, p, t, color = C.text) {
-  const [x, y] = view.toScreen(p); ctx.fillStyle = color; ctx.font = '12px Segoe UI, sans-serif'; ctx.fillText(t, x + 4, y - 4);
+  const [x, y] = view.toScreen(p); ctx.fillStyle = color; ctx.font = '12px IBM Plex Sans, Segoe UI, sans-serif'; ctx.fillText(t, x + 4, y - 4);
 }
 const centroid = pts => pts.reduce((a, p) => [a[0] + p[0] / pts.length, a[1] + p[1] / pts.length], [0, 0]);
 
@@ -39,12 +39,12 @@ export function drawGeometry(ctx, view, geo, { errors = [], fields = [], light =
   if (!geo?.outline?.length) return;
   ctx.lineWidth = 1;
   for (const q of geo.areaLoads ?? []) { poly(ctx, view, q.pts); ctx.fillStyle = C.area; ctx.fill(); ctx.strokeStyle = C.areaLine; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]); label(ctx, view, centroid(q.pts), q.label, C.areaLine); }
-  poly(ctx, view, geo.outline); ctx.strokeStyle = light ? '#222' : C.outline; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
-  for (const h of geo.holes ?? []) { poly(ctx, view, h.pts); ctx.fillStyle = light ? '#fff' : C.bg; ctx.fill(); ctx.strokeStyle = C.hole; ctx.stroke(); label(ctx, view, centroid(h.pts), h.label, C.hole); }
+  poly(ctx, view, geo.outline); ctx.strokeStyle = C.outline; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
+  for (const h of geo.holes ?? []) { poly(ctx, view, h.pts); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = C.hole; ctx.stroke(); label(ctx, view, centroid(h.pts), h.label, C.hole); }
   for (const l of geo.lineLoads ?? []) { poly(ctx, view, l.pts, false); ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1; label(ctx, view, l.pts[0], l.label, C.line); }
   for (const w of geo.walls ?? []) { poly(ctx, view, w.pts, false); ctx.strokeStyle = C.wall; ctx.lineWidth = 5; ctx.stroke(); ctx.lineWidth = 1; label(ctx, view, w.pts[0], w.label, C.wall); }
   for (const e of geo.edges ?? []) { poly(ctx, view, e.pts, false); ctx.strokeStyle = C.edge; ctx.lineWidth = 4; ctx.stroke(); ctx.lineWidth = 1; label(ctx, view, e.pts[0], e.label, C.edge); }
-  for (const c of geo.columns ?? []) { poly(ctx, view, c.pts); ctx.fillStyle = C.column; ctx.fill(); label(ctx, view, c.c ?? centroid(c.pts), c.label, light ? '#a00' : C.column); }
+  for (const c of geo.columns ?? []) { poly(ctx, view, c.pts); ctx.fillStyle = C.column; ctx.fill(); label(ctx, view, c.c ?? centroid(c.pts), c.label, C.column); }
   for (const p of geo.pointLoads ?? []) { const [x, y] = view.toScreen(p.p); ctx.fillStyle = C.point; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); label(ctx, view, p.p, p.label, C.point); }
   for (const f of fields) { poly(ctx, view, f.pts); ctx.strokeStyle = C.field; ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]); label(ctx, view, centroid(f.pts), `${f.label} (L = ${f.L} m)`, C.field); }
   for (const e of errors) if (e.locM) {
@@ -53,7 +53,7 @@ export function drawGeometry(ctx, view, geo, { errors = [], fields = [], light =
   }
 }
 
-export function drawMesh(ctx, view, mesh, color = 'rgba(160,190,220,0.45)') {
+export function drawMesh(ctx, view, mesh, color = 'rgba(26,77,92,0.35)') {
   ctx.strokeStyle = color; ctx.lineWidth = 0.6; ctx.beginPath();
   for (const [a, b, c] of mesh.elems) {
     const A = view.toScreen(mesh.nodes[a]), B = view.toScreen(mesh.nodes[b]), Cc = view.toScreen(mesh.nodes[c]);
@@ -78,8 +78,8 @@ export function colorScale(values, { diverging = false, bands = 12, zeroBlank = 
   if (max - min < 1e-12) max = min + 1;
   const band = v => Math.min(bands - 1, Math.floor((v - min) / (max - min) * bands));
   const color = v => {
-    if (!Number.isFinite(v)) return [255, 0, 255];
-    if (zeroBlank && Math.abs(v) < 1e-9) return [40, 52, 66];
+    if (!Number.isFinite(v)) return [232, 230, 222]; // poza zakresem kontroli (np. strefa przebicia)
+    if (zeroBlank && Math.abs(v) < 1e-9) return [244, 243, 238];
     return lerp(diverging ? DIV : SEQ, (band(v) + 0.5) / bands);
   };
   return { min, max, bands, color, diverging };
@@ -124,4 +124,23 @@ export function nearestNode(nodes, [x, y]) {
   let best = -1, bd = Infinity;
   for (let i = 0; i < nodes.length; i++) { const d = (nodes[i][0] - x) ** 2 + (nodes[i][1] - y) ** 2; if (d < bd) { bd = d; best = i; } }
   return { index: best, dist: Math.sqrt(bd) };
+}
+
+// Podgląd rysunku DXF (encje z readDxf, współrzędne w mm): kolory warstw jak w pliku (ACI → RGB)
+const ACI = { 1: '#d32f2f', 2: '#b8860b', 3: '#2e7d32', 4: '#00838f', 5: '#1565c0', 6: '#8e24aa', 7: '#1d1d1b', 8: '#8a8a80' };
+export function drawDxf(ctx, view, ents, layerColor, hidden = new Set()) {
+  ctx.lineWidth = 1;
+  for (const e of ents) {
+    if (hidden.has(e.layer)) continue;
+    const col = ACI[layerColor[e.layer]] ?? '#1d1d1b', mm = p => [p[0] / 1000, p[1] / 1000];
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.setLineDash(e.layer === 'ZB_STREFY' ? [6, 4] : []);
+    if (e.type === 'LINE') { const a = view.toScreen(mm(e.a)), b = view.toScreen(mm(e.b)); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    else if (e.type === 'POLY') { ctx.beginPath(); e.pts.forEach((p, i) => { const q = view.toScreen(mm(p)); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); if (e.closed) ctx.closePath(); ctx.stroke(); }
+    else if (e.type === 'TEXT' && view.scale > 25) {
+      const q = view.toScreen(mm(e.p)); ctx.save(); ctx.translate(q[0], q[1]); ctx.rotate(-(e.rot ?? 0) * Math.PI / 180);
+      ctx.font = `${Math.max(8, Math.min(14, (e.h ?? 120) / 1000 * view.scale))}px IBM Plex Sans, sans-serif`; ctx.fillText(e.text, 0, 0); ctx.restore();
+    }
+  }
+  ctx.setLineDash([]);
 }

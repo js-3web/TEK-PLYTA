@@ -147,3 +147,7 @@ SOFTWARE.
 ```
 
 esbuild (MIT) — tylko narzędzie budowania, nie wchodzi do programu.
+
+## IBM Plex Sans, IBM Plex Mono (SIL Open Font License 1.1) — fonty interfejsu
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Licencja: SIL Open Font License, Version 1.1 — https://openfontlicense.org (fonty wbudowane w `app/fonts.css`, przeniesione z TEK-AUDYTOR v0.7).
