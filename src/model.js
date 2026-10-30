@@ -146,6 +146,33 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
 
   // curvature: opcjonalnie (elemIndex) => [κx, κy, κxy] krzywizna wymuszona (skurcz); tylko DKT.
   // Momenty zwracane są wtedy jako D·κ całkowitej (bez odjęcia κ0) — przypadek służy do ugięć.
+  // Siły poprzeczne z równowagi płyty: vx = ∂mx/∂x + ∂mxy/∂y, vy = ∂mxy/∂x + ∂my/∂y.
+  // DKT nie daje ich wprost (teoria Kirchhoffa) — gradient momentów węzłowych liczymy w każdym węźle
+  // z płaszczyzny dopasowanej metodą najmniejszych kwadratów do węzła i jego sąsiadów (gradient
+  // pojedynczego trójkąta: rozrzut ±7 %). Jeden pierścień: dwa pierścienie wygładzały szum, ale rozmywały
+  // skok sił poprzecznych nad podporą (−30 % w 0,25 m od ściany) — po stronie niebezpiecznej.
+  const adjN = adjacency(nn, elems);
+  const lsq = Array.from({ length: nn }, (_, i) => {
+    const P = [i, ...adjN[i]], [x0, y0] = nodes[i];
+    let sxx = 0, sxy = 0, syy = 0, sx = 0, sy = 0;
+    for (const k of P) { const dx = nodes[k][0] - x0, dy = nodes[k][1] - y0; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; sx += dx; sy += dy; }
+    // m ≈ a + b·dx + c·dy → równania normalne 3×3; rozwiązanie przez macierz odwrotną (wiersze b, c)
+    const n0 = P.length, M = [[n0, sx, sy], [sx, sxx, sxy], [sy, sxy, syy]];
+    const det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+    const inv = (r, c) => { const m = M.filter((_, k) => k !== c).map(row => row.filter((_, k) => k !== r)); return ((r + c) % 2 ? -1 : 1) * (m[0][0] * m[1][1] - m[0][1] * m[1][0]) / det; };
+    const Ib = [inv(1, 0), inv(1, 1), inv(1, 2)], Ic = [inv(2, 0), inv(2, 1), inv(2, 2)];
+    // współczynniki: b = Σ_k (Ib·[1, dx, dy]) m_k
+    return { P, wb: P.map(k => { const dx = nodes[k][0] - x0, dy = nodes[k][1] - y0; return Ib[0] + Ib[1] * dx + Ib[2] * dy; }),
+      wc: P.map(k => { const dx = nodes[k][0] - x0, dy = nodes[k][1] - y0; return Ic[0] + Ic[1] * dx + Ic[2] * dy; }) };
+  });
+  function shearFromMoments(m) {
+    return lsq.map(({ P, wb, wc }) => {
+      let mx_x = 0, mxy_y = 0, mxy_x = 0, my_y = 0;
+      P.forEach((k, j) => { mx_x += wb[j] * m[k][0]; mxy_x += wb[j] * m[k][2]; mxy_y += wc[j] * m[k][2]; my_y += wc[j] * m[k][1]; });
+      return [mx_x + mxy_y, mxy_x + my_y];
+    });
+  }
+
   function solveCase({ q = 0, point = [], curvature = null } = {}) {
     const qOf = typeof q === 'function' ? q : () => q;
     // Pełny wektor obciążeń (także na zablokowanych DOF — do obliczenia reakcji).
@@ -218,10 +245,11 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
     }
     const m = Array.from({ length: nn }, (_, i) => [mSum[3 * i] / cnt[i], mSum[3 * i + 1] / cnt[i], mSum[3 * i + 2] / cnt[i]]);
     const qs = element === 'DKT' ? null : Array.from({ length: nn }, (_, i) => [qSum[2 * i] / cnt[i], qSum[2 * i + 1] / cnt[i]]);
+    const v = shearFromMoments(m);
 
     let totalLoad = 0, totalReaction = 0;
     for (let i = 0; i < nn; i++) { totalLoad += fFull[3 * i]; totalReaction += R[3 * i]; }
-    return { u, w: (i) => u[3 * i], m, q: qs, R, totalLoad, totalReaction };
+    return { u, w: (i) => u[3 * i], m, v, q: qs, R, totalLoad, totalReaction };
   }
 
   return { solveCase, neq, profileSize, factorSize: solver === 'sparse' ? L.nnz : profileSize, nNodes: nn };

@@ -153,6 +153,8 @@ export function slabEnvelopes(cases, actions, opts = {}) {
     mx: res.map(r => Float64Array.from(r.m, m => m[0])),
     my: res.map(r => Float64Array.from(r.m, m => m[1])),
     mxy: res.map(r => Float64Array.from(r.m, m => m[2])),
+    vx: res.map(r => Float64Array.from(r.v ?? r.m, v => (r.v ? v[0] : 0))),
+    vy: res.map(r => Float64Array.from(r.v ?? r.m, v => (r.v ? v[1] : 0))),
   };
   const sup = res[0].supportReactions ?? [];
   const supFields = Object.fromEntries(['V', 'Mx', 'My'].map(q =>
