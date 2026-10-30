@@ -7,8 +7,8 @@
 //     wtórnych: materiały dydaktyczne PWr, Graitec; tekst NA do sprawdzenia przez projektanta).
 //   • γG,sup = 1,35, γG,inf = 1,00, γQ = 1,50, ξ = 0,85 — EN 1990 tabl. A1.2(B), wartości zalecane
 //     (źródła wtórne zgodne co do przyjęcia w PL).
-//   • ψ0, ψ1, ψ2 — EN 1990 tabl. A1.1, wartości ZALECANE CEN. Zgodność z PN-EN 1990/NA
-//     DO POTWIERDZENIA z tekstem normy przed wersją do sprzedaży.
+//   • ψ0, ψ1, ψ2 — EN 1990 tabl. A1.1, wartości ZALECANE CEN. Decyzja projektanta (30.10.2026):
+//     przyjęte wartości zalecane; porównania z tekstem PN-EN 1990/NA nie wykonano — stąd verified: false.
 
 export const NORM = {
   id: 'PN-EN 1990:2004+NA',

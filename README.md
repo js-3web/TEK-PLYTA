@@ -1,7 +1,7 @@
 # TEK-PLYTA
 
 MES płyt żelbetowych wg PN-EN 1992-1-1:2008 + NA. Linia programów obliczeniowych TEKTORIA.
-Specyfikacja v1: dokument „TEK-PLYTA v1 — specyfikacja” (Claude Docs), kopia w `docs/specyfikacja-v1.docx`;
+Specyfikacja v1: dokument „TEK-PLYTA v1 — specyfikacja” (Claude Docs — wersja aktualna), kopia z 27.10 w `docs/specyfikacja-v1.docx`;
 zapis rozmowy z etapów 1–3 w `docs/chat-cowork.docx`.
 
 ## Uruchomienie testów
@@ -33,7 +33,7 @@ npm test
 | `src/norms/en1990-pl.js` | wymienny zestaw normowy: γ, ξ, ψ (tabl. A1.1) |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 52 testy: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 54 testy: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 
@@ -107,8 +107,14 @@ Do sprawdzenia przez użytkownika: otwarcie `assets/TEK-PLYTA_wzorzec.dxf` w ZWC
 - Testy: przykłady liczone ręcznie (komentarze w teście), belka ciągła dwuprzęsłowa wg tablic
   (0,0957·qL², −0,125·gL²), równowaga reakcji w kombinacji rządzącej, błędy danych.
 
-Do potwierdzenia z tekstem normy przed wersją do sprzedaży (`src/norms/en1990-pl.js`, `verified: false`):
-wartości ψ0/ψ1/ψ2 w PN-EN 1990/NA (wpisane zalecane CEN, tabl. A1.1), wariant 6.10a w NA.
+ψ0/ψ1/ψ2: wartości zalecane CEN (tabl. A1.1) — decyzja projektanta z 30.10.2026, bez porównania z tekstem
+PN-EN 1990/NA (`src/norms/en1990-pl.js`, `verified: false`).
+
+Wzorzec po zapisie w ZWCAD 2022 jako DXF 2010 (`tests/fixtures/wzorzec-zwcad2022-r2010.dxf`, plik od użytkownika):
+geometria identyczna z oryginałem co do bitu, 0 błędów i ostrzeżeń, łańcuch do obwiedni SGN przechodzi.
+
+T8 (decyzja 30.10.2026): brak komercyjnego MES — porównanie z xdfem2d (niezależny MES) i pasmami w RM-Win
+(kontrola wiarygodności; metoda pasm jest przybliżona, więc bez tolerancji liczbowej).
 
 Znalezione przy okazji (do etapu 5): momenty w węzłach to średnia z elementów — nad linią podpory
 przy elementach wydłużonych (0,25 × 0,5 m) odchyłka +5 % względem belki ciągłej, przy kwadratowych < 1 %.
