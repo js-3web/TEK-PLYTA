@@ -117,7 +117,13 @@ export function controlPerimeter(column, geo, d, r = 2 * d) {
   if (reentrant) u0 = validLength(offsetCurve(hull, 1e-4), p => pointInPolygon(p, geo.outline)); // obwód słupa w płycie
   else if (type === 'krawedziowy') { const { c1, c2 } = extent(dirs[0]); u0 = Math.min(c2 + 3 * d, c2 + 2 * c1); }
   if (type === 'narozny') { const e1 = extent(dirs[0]); u0 = Math.min(3 * d, e1.c1 + e1.c2); }
-  return { u1, u0, type, reentrant, full, shadows: shadows.map(s => s.label), nearEdges: near.length };
+  // odcinki krzywej obwodu leżące w płycie (do rysunku): ciągi kolejnych punktów spełniających ok(p)
+  const curvePts = offsetCurve(hull, r), runs = [];
+  let run = [];
+  for (const q of curvePts) { if (ok(q)) run.push(q); else if (run.length) { runs.push(run); run = []; } }
+  if (run.length) { if (runs.length && ok(curvePts[0]) && run.length + runs[0].length <= curvePts.length) runs[0] = [...run, ...runs[0]]; else runs.push(run); }
+  const closedLoop = runs.length === 1 && runs[0].length === curvePts.length;
+  return { u1, u0, type, reentrant, full, shadows: shadows.map(s => s.label), nearEdges: near.length, runs, closedLoop };
 }
 
 // Nośność na przebicie przy danym obwodzie. VEd [kN], d [m], rhoX/rhoY — stopnie zbrojenia górą.
