@@ -161,9 +161,13 @@ export function runProject(project, progress = () => {}) {
     times: { siatka: t.mesh - t.start, MES: t.fem - t.mesh, SGN: t.uls - t.fem, SGU: t.sls - t.uls },
   };
 
+  // podpory odrywane: reakcja ujemna (rozciąganie) w obwiedni — model ją przenosi, rzeczywista podpora (mur) zwykle nie
+  const uplift = env.supports.ULS.filter(x => x.V.min < -1e-6).map(x => ({ code: 'podpora-odrywana',
+    msg: `${x.label}: reakcja ujemna do ${x.V.min.toFixed(1)} kN (odrywanie płyty) — sprawdź, czy podparcie przenosi rozciąganie; jeśli nie, zmień model podpory.` }));
+
   return {
     ok: true, version: VERSION, geo, errors: [],
-    warnings: [...geo.warnings, ...mesh.warnings ?? [], ...analysis.warnings, ...uls.warnings, ...sls.warnings],
+    warnings: [...geo.warnings, ...mesh.warnings ?? [], ...analysis.warnings, ...uplift, ...uls.warnings, ...sls.warnings],
     mesh: { nodes: mesh.nodes, elems: mesh.elems, quality: mesh.quality },
     cases: caseList, equilibrium,
     combinations: { ULS: env.schemes.ULS.map(v => v.name), QP: env.schemes.QP.map(v => v.name) },

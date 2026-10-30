@@ -1,0 +1,50 @@
+/* TEK-PŁYTA — szata graficzna linii TEKTORIA (ciemny granat #0b1622) */
+:root { --bg: #0b1622; --panel: #101e2d; --line: #1f3347; --text: #dbe5ef; --muted: #8aa0b6; --acc: #3fb6d9; --ok: #46a758; --warn: #f5a524; --err: #ff4d4f; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 "Segoe UI", Arial, sans-serif; }
+header { display: flex; align-items: center; gap: 18px; height: 46px; padding: 0 14px; border-bottom: 1px solid var(--line); background: #08111b; }
+.brand { font-weight: 700; letter-spacing: .5px; white-space: nowrap; }
+.brand .logo { color: var(--acc); }
+.brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 2px; overflow-x: auto; }
+nav button { background: none; border: 0; color: var(--muted); padding: 8px 11px; border-radius: 6px; cursor: pointer; font: inherit; white-space: nowrap; }
+nav button:hover { color: var(--text); background: var(--panel); }
+nav button.on { color: #fff; background: #17324a; }
+.status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+main { display: flex; height: calc(100% - 46px); }
+aside { width: 430px; min-width: 330px; overflow-y: auto; padding: 12px 14px 40px; border-right: 1px solid var(--line); background: var(--panel); }
+.view { position: relative; flex: 1; }
+canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+h2 { font-size: 15px; margin: 4px 0 10px; }
+h3 { font-size: 13px; margin: 16px 0 6px; color: var(--acc); }
+p { margin: 6px 0; }
+.muted { color: var(--muted); }
+button.btn { background: #17324a; color: #fff; border: 1px solid #24496a; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; margin: 2px 4px 2px 0; }
+button.btn:hover { background: #1f4363; }
+button.btn.primary { background: #1679a6; border-color: #1d93c9; }
+button.btn.danger { background: #4a1d22; border-color: #7a2a31; }
+button.btn:disabled { opacity: .45; cursor: default; }
+input, select, textarea { background: #0a1520; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; font: inherit; }
+input[type=number] { width: 78px; }
+textarea { width: 100%; min-height: 110px; }
+table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; font-size: 12px; }
+th, td { border-bottom: 1px solid var(--line); padding: 3px 4px; text-align: left; vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.grid { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+.msg { padding: 5px 8px; border-radius: 5px; margin: 3px 0; cursor: pointer; }
+.msg.err { background: rgba(255,77,79,.12); border-left: 3px solid var(--err); }
+.msg.warn { background: rgba(245,165,36,.10); border-left: 3px solid var(--warn); }
+.msg.ok { background: rgba(70,167,88,.12); border-left: 3px solid var(--ok); cursor: default; }
+.bad { color: var(--err); font-weight: 600; } .good { color: var(--ok); }
+.legend { position: absolute; right: 10px; top: 10px; background: rgba(8,17,27,.88); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 11px; }
+.legend:empty, .readout:empty { display: none; }
+.lg-unit { font-weight: 600; margin-bottom: 3px; } .lg-row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lg-sw { width: 16px; height: 11px; display: inline-block; }
+.readout { position: absolute; left: 10px; bottom: 10px; background: rgba(8,17,27,.88); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.progress { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); width: 320px; background: #08111b; border: 1px solid var(--line); border-radius: 8px; padding: 12px; text-align: center; }
+.progress .bar { height: 6px; background: var(--acc); width: 0; border-radius: 3px; margin-bottom: 8px; transition: width .2s; }
+.hidden { display: none; }
+details { margin: 8px 0; } summary { cursor: pointer; color: var(--acc); }
+.note { background: rgba(245,165,36,.10); border-left: 3px solid var(--warn); padding: 6px 8px; margin: 8px 0; font-size: 12px; }
+aside select { max-width: 190px; }

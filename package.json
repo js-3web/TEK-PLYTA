@@ -1,11 +1,14 @@
 {
   "name": "tek-plyta",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "TEK-PLYTA — MES płyt żelbetowych wg PN-EN 1992-1-1 (TEKTORIA)",
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test \"tests/**/*.test.js\""
+    "test": "node --test \"tests/**/*.test.js\"",
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && node scripts/serve.mjs",
+    "test:ui": "node scripts/build.mjs && node scripts/e2e.cjs"
   },
   "license": "UNLICENSED",
   "dependencies": {

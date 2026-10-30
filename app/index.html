@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TEK-PŁYTA</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">TEK</span>-PŁYTA <small id="version"></small></div>
+  <nav id="nav">
+    <button data-mod="geo" class="on">Geometria</button>
+    <button data-mod="data">Dane</button>
+    <button data-mod="mesh">Siatka</button>
+    <button data-mod="res">Wyniki</button>
+    <button data-mod="design">Wymiarowanie</button>
+    <button data-mod="report">Raport</button>
+    <button data-mod="projects">Projekty</button>
+    <button data-mod="ai">AI</button>
+  </nav>
+  <div id="status" class="status"></div>
+</header>
+<main>
+  <aside id="panel"></aside>
+  <section class="view">
+    <canvas id="cv"></canvas>
+    <div id="legend" class="legend"></div>
+    <div id="readout" class="readout"></div>
+    <div id="progress" class="progress hidden"><div class="bar"></div><span></span></div>
+  </section>
+</main>
+<script>
+  // biblioteka Neutralino tylko w oknie .exe (Neutralino wstrzykuje NL_PORT); w przeglądarce — pomijana
+  if (window.NL_PORT) document.write('<script src="js/neutralino.js"><\/script>');
+</script>
+<script type="module" src="dist/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "applicationId": "pl.tektoria.tekplyta",
+  "version": "0.5.0",
+  "defaultMode": "window",
+  "port": 0,
+  "documentRoot": "/app/",
+  "url": "/",
+  "enableServer": true,
+  "enableNativeAPI": true,
+  "tokenSecurity": "one-time",
+  "logging": { "enabled": false, "writeToLogFile": false },
+  "nativeAllowList": ["app.*", "os.showSaveDialog", "os.getPath", "filesystem.readBinaryFile", "filesystem.writeBinaryFile", "filesystem.createDirectory", "window.*"],
+  "modes": {
+    "window": {
+      "title": "TEK-PŁYTA",
+      "width": 1440, "height": 900, "minWidth": 1000, "minHeight": 650,
+      "center": true, "icon": "/app/icon.png",
+      "enableInspector": false, "exitProcessOnClose": true
+    }
+  },
+  "cli": {
+    "binaryName": "TEK-PLYTA",
+    "resourcesPath": "/app/",
+    "extensionsPath": "/extensions/",
+    "clientLibrary": "/app/js/neutralino.js",
+    "binaryVersion": "6.10.0",
+    "clientVersion": "6.10.0"
+  }
+}

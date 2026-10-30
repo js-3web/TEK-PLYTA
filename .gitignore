@@ -1,2 +1,7 @@
 node_modules/
 *.log
+app/dist/
+app/js/neutralino.js
+bin/
+dist/
+.tmp/

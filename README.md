@@ -4,13 +4,46 @@ MES płyt żelbetowych wg PN-EN 1992-1-1:2008 + NA. Linia programów obliczeniow
 Specyfikacja v1: dokument „TEK-PLYTA v1 — specyfikacja” (Claude Docs — wersja aktualna), kopia z 27.10 w `docs/specyfikacja-v1.docx`;
 zapis rozmowy z etapów 1–3 w `docs/chat-cowork.docx`.
 
-## Uruchomienie testów
+## Jak używać
 
-Wymaga Node.js 22+. W folderze projektu:
+**Program dla Windows (.exe):** zakładka *Actions* w GitHubie → przebieg „exe” → artefakt
+**TEK-PLYTA-windows** (plik `TEK-PLYTA-win_x64.exe`). Program działa offline, bez instalatora; wymaga
+WebView2 (wbudowany w Windows 11, w Windows 10 instalowany z aktualizacjami). Baza projektów:
+`Dokumenty/TEK-PLYTA/tekplyta.db`.
+
+**Wersja robocza w przeglądarce** (Node.js 22+):
 
 ```
-npm test
+npm ci
+npm start
 ```
+
+i otwórz http://localhost:8080. Baza projektów w przeglądarce: IndexedDB.
+
+**Kolejność pracy:** Geometria (pobierz wzorzec DXF, narysuj w ZWCAD, zapisz jako DXF 2010, wczytaj)
+→ Dane (grubość, beton, siatki, obciążenia z kategoriami, podpory, SGU, pola ugięć z L)
+→ Siatka (h0, „Licz”) → Wyniki (mapy, kontrola równowagi) → Wymiarowanie (zginanie, przebicie,
+ugięcia, rysy) → Raport (PDF przez „Drukuj”, DOCX) → Projekty (baza, warianty, plik .tekplyta)
+→ AI (paczka do sprawdzenia w Twoim narzędziu AI, import uwag).
+
+## Testy
+
+```
+npm test          # 89 testów obliczeniowych (wzorce, normy, raport, baza, licencja)
+npm run test:ui   # test interfejsu w przeglądarce (Playwright + Chromium)
+```
+
+## Licencje (sprzedaż)
+
+Klucz Ed25519 sprawdzany offline. Wydawca (tylko na swoim komputerze, klucz prywatny POZA repozytorium):
+
+```
+node scripts/license.mjs keygen C:/klucze-tekplyta
+```
+
+Wypisany klucz publiczny wpisz do `app/src/license-key.js` (zamiast `null`) i zbuduj program.
+Klucz dla klienta: `node scripts/license.mjs issue C:/klucze-tekplyta/tekplyta-private.pem "Firma X" 2027-12-31`.
+Bez klucza publicznego (stan obecny) program działa, a raport ma dopisek „wersja bez licencji”.
 
 ## Struktura
 
@@ -37,9 +70,15 @@ npm test
 | `src/design/slab.js` | wymiarowanie całej płyty: zbrojenie w węzłach, uśrednianie nad słupami, przebicie |
 | `src/design/creep.js` | pełzanie φ(∞,t0) i skurcz εcs — zał. B, 3.1.4 |
 | `src/design/sls.js` | przekrój zarysowany, rysy 7.3.4, ugięcia 7.4.3 iteracyjnie w MES (płyta ortotropowa), skurcz (7.21) |
+| `src/app/pipeline.js` | cały łańcuch obliczeń projektu (DXF → wyniki) — dla aplikacji i testów |
+| `src/app/db.js`, `ai.js`, `license-core.js` | baza SQLite (sql.js), paczka AI, licencja Ed25519 |
+| `src/report/` | raport (HTML → PDF, DOCX), zapis ZIP |
+| `app/` | interfejs: `index.html`, `src/main.js` (moduły), `src/worker.js` (obliczenia w tle), `src/render.js` (mapy) |
+| `scripts/` | `build.mjs` (esbuild), `serve.mjs` (serwer roboczy), `e2e.cjs` (test UI), `license.mjs` |
+| `neutralino.config.json`, `.github/workflows/exe.yml` | okno .exe (Neutralinojs 6.10.0) i jego budowa w GitHub Actions |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 76 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 89 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 

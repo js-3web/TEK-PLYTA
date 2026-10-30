@@ -1,0 +1,32 @@
+# Budowa aplikacji Windows (.exe, Neutralino) — przy pushu, tagu v* albo ręcznie z zakładki Actions.
+# Wynik: artefakt „TEK-PLYTA-windows” (plik .exe z wbudowanymi zasobami). Testy muszą przejść przed budową.
+name: exe
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**', 'main', 'master']
+    tags: ['v*']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Pobranie binariów Neutralino (wersje z neutralino.config.json; awaryjnie najnowsze)
+        run: npx --yes @neutralinojs/neu@11.8.0 update || npx --yes @neutralinojs/neu@11.8.0 update --latest
+      - name: Budowa .exe z wbudowanymi zasobami
+        run: npx --yes @neutralinojs/neu@11.8.0 build --release --embed-resources
+      - name: Zawartość dist
+        run: ls -laR dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TEK-PLYTA-windows
+          path: |
+            dist/TEK-PLYTA/TEK-PLYTA-win_x64.exe
+            dist/TEK-PLYTA/resources.neu
+          if-no-files-found: error

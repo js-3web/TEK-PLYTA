@@ -13,7 +13,7 @@ const TYPE = { wewnetrzny: 'wewnętrzny', krawedziowy: 'krawędziowy', narozny: 
 const LAYER = { bottomX: 'dół, kierunek x', bottomY: 'dół, kierunek y', topX: 'góra, kierunek x', topY: 'góra, kierunek y' };
 
 // images: { mesh, w_lt, As_bottomX, … } → { src: dataURL PNG, w, h } (rysunki z aplikacji; opcjonalne)
-export function buildReport(project, res, images = {}, { date = new Date().toISOString().slice(0, 10), build = '' } = {}) {
+export function buildReport(project, res, images = {}, { date = new Date().toISOString().slice(0, 10), build = '', unlicensed = false } = {}) {
   const B = [], h1 = t => B.push({ type: 'h1', text: t }), h2 = t => B.push({ type: 'h2', text: t });
   const p = t => B.push({ type: 'p', text: t }), note = t => B.push({ type: 'note', text: t });
   const table = (head, rows) => B.push({ type: 'table', head, rows });
@@ -27,6 +27,7 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
     meta.name ? `Projekt: ${meta.name}` : null, meta.author ? `Autor: ${meta.author}` : null,
     `Data: ${date}`, `Program: TEK-PŁYTA ${res.version}${build ? ` (kompilacja ${build})` : ''}`,
   ].filter(Boolean) });
+  if (unlicensed) note('WERSJA BEZ LICENCJI — raport wyłącznie do celów testowych.');
   B.push({ type: 'pagebreak' });
 
   // --- 1. Założenia ---
