@@ -115,3 +115,5 @@ table.mini select{max-width:210px}
 .hidden{display:none}
 .report-frame{width:100%;height:calc(100vh - 220px);border:1px solid var(--border);background:#fff}
 input.changed{background:var(--warning-bg);border-color:#e6cf93;font-weight:600}
+.lg-ext{margin-top:6px;padding-top:4px;border-top:1px solid var(--border);font-family:var(--mono)}
+#mapSel,#srcSel{width:100%;max-width:270px}

@@ -12,7 +12,9 @@ import { ProjectDB, exportProjectFile, importProjectFile } from '../../src/app/d
 import { buildAIPackage, parseAIReview } from '../../src/app/ai.js';
 import { rebarDrawing } from '../../src/cad/drawing.js';
 import { readDxf } from '../../src/dxf/read.js';
-import { View, bboxOf, clear, drawGeometry, drawMesh, drawMap, colorScale, legendHTML, nearestNode, drawDxf } from './render.js';
+import { View, bboxOf, clear, drawGeometry, drawMesh, drawMap, nearestNode, drawDxf, drawIsolines, drawExtrema, drawSection, robotLegend } from './render.js';
+import { makeScale, isolines, extrema, sectionProfile, locator } from '../../src/viz/maps.js';
+import { envelope, combine } from '../../src/combinations.js';
 import { isNative, saveFile, openFile, loadDbBytes, saveDbBytes } from './storage.js';
 import { checkLicense } from './license.js';
 import { produkt, ikona, tektoriaCiemne } from './logos.js';
@@ -20,7 +22,9 @@ import initSqlJs from 'sql.js/dist/sql-wasm.js';
 
 const $ = s => document.querySelector(s);
 const S = {
-  project: defaultProject(), geo: null, dxfName: null, res: null, stale: true, tab: 'start', mapKey: 'w_lt', rebarLayer: 'topY',
+  project: defaultProject(), geo: null, dxfName: null, res: null, stale: true, tab: 'start', mapKey: 'q:mx', rebarLayer: 'topY',
+  // opcje mapy (jak w Robocie): źródło, skala automatyczna/ręczna, pasma, izolinie, ekstrema, siatka
+  vopt: { src: 'env:ULS:max', auto: true, min: null, max: null, bands: 16, sym: false, smooth: false, iso: true, ext: true, mesh: false }, secSel: 0,
   db: null, dbWhere: '', ids: { projectId: null, variantId: null, variantName: 'wariant 1' }, review: [], pick: null, hl: null,
   license: { ok: false, msg: '' }, drawing: null, hiddenLayers: new Set(),
 };
@@ -188,12 +192,34 @@ const VIEWS = {
   },
 
   res() {
-    const r = S.res, groups = {};
-    for (const m of MAPS) (groups[m.group] ??= []).push(m);
-    let h = card('Mapa', `<select id="mapSel" style="width:100%">${Object.entries(groups).map(([g, ms]) => `<optgroup label="${g}">${ms.map(m => `<option value="${m.key}" ${m.key === S.mapKey ? 'selected' : ''}>${m.name}</option>`).join('')}</optgroup>`).join('')}</select>
-      <p class="hint">Najedź na rzut: wartość w najbliższym węźle. Kółko — powiększenie, przeciąganie — przesuw, dwuklik — cały rzut.</p>`);
+    const r = S.res, o = S.vopt, cm = currentMap(), isBase = S.mapKey.startsWith('q:');
+    const groups = { 'Siły i przemieszczenia': Object.entries(BASE).map(([k, b]) => [`q:${k}`, b[0]]) };
+    for (const m of MAPS) if (!HIDDEN_GROUPS.has(m.group)) (groups[m.group] ??= []).push([m.key, m.name]);
+    let h = card('Mapa', `<div class="form"><span>Wielkość</span><select id="mapSel">${Object.entries(groups).map(([g, ms]) => `<optgroup label="${g}">${ms.map(([k, n]) => `<option value="${k}" ${k === S.mapKey ? 'selected' : ''}>${esc(n)}</option>`).join('')}</optgroup>`).join('')}</select>
+      ${isBase ? `<span>Przypadek / kombinacja</span><select id="srcSel">${sourceOptions().map(([k, n]) => `<option value="${k}" ${k === o.src ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : ''}</div>
+      <p class="hint">Najedź na rzut: wartość pod kursorem (interpolacja w elemencie). Kółko — powiększenie, przeciąganie — przesuw, dwuklik — cały rzut.</p>`);
+    h += card('Skala i widok', `<div class="form">
+      <span>Skala automatyczna</span><input type="checkbox" data-vopt="auto" ${o.auto ? 'checked' : ''}>
+      <span>min / max [${esc(cm.unit)}]</span><span><input type="number" step="any" data-vopt="min" value="${o.auto ? '' : o.min ?? ''}" ${o.auto ? 'disabled' : ''}> <input type="number" step="any" data-vopt="max" value="${o.auto ? '' : o.max ?? ''}" ${o.auto ? 'disabled' : ''}></span>
+      <span>Liczba kolorów</span><input type="number" min="4" max="24" step="1" data-vopt="bands" value="${o.bands}">
+      <span>Skala symetryczna (momenty, siły)</span><input type="checkbox" data-vopt="sym" ${o.sym ? 'checked' : ''}>
+      <span>Barwy ciągłe (bez warstwic)</span><input type="checkbox" data-vopt="smooth" ${o.smooth ? 'checked' : ''}>
+      <span>Izolinie z wartościami</span><input type="checkbox" data-vopt="iso" ${o.iso ? 'checked' : ''}>
+      <span>Ekstrema (max, min)</span><input type="checkbox" data-vopt="ext" ${o.ext ? 'checked' : ''}>
+      <span>Siatka MES</span><input type="checkbox" data-vopt="mesh" ${o.mesh ? 'checked' : ''}></div>`);
+    const secs = S.project.sections ?? [];
+    let sh = `<div class="btns"><button class="btn" data-act="addSection">${S.pick?.kind === 'section' ? 'Kliknij 2 punkty przekroju na rzucie…' : 'Dodaj przekrój (2 punkty)'}</button></div>`;
+    if (secs.length) {
+      sh += `<table class="mini"><tr><th>Przekrój</th><th>L [m]</th><th>max</th><th>min</th><th></th></tr>${secs.map((sc, i) => {
+        const pr = sectionProfile(r.mesh.nodes, r.mesh.elems, cm.values, sc.a, sc.b, 200, loc());
+        return `<tr><td><button class="btn sm ${i === S.secSel ? 'primary' : ''}" data-act="selSection" data-i="${i}">${esc(sc.label)}</button></td><td class="num">${fmt(pr.L)}</td><td class="num">${fmt(pr.extrema?.max.v, cm.d)}</td><td class="num">${fmt(pr.extrema?.min.v, cm.d)}</td><td><button class="btn sm danger" data-act="delSection" data-i="${i}">×</button></td></tr>`;
+      }).join('')}</table>`;
+      const sel = secs[Math.min(S.secSel, secs.length - 1)];
+      sh += sectionChart(sel, sectionProfile(r.mesh.nodes, r.mesh.elems, cm.values, sel.a, sel.b, 200, loc()), cm);
+    } else sh += '<p class="hint">Przekrój pokazuje wykres wybranej wielkości wzdłuż odcinka (jak „Przekroje przez panele” w Robocie).</p>';
+    h += card('Przekroje', sh);
     h += card('Reakcje podpór <small>obwiednia SGN</small>', `<table class="mini"><tr><th>Podpora</th><th>V max [kN]</th><th>V min [kN]</th><th>Kombinacja</th></tr>
-      ${r.supports.map(s => `<tr><td><code>${s.label}</code></td><td class="num">${fmt(s.Vmax, 1)}</td><td class="num">${fmt(s.Vmin, 1)}</td><td class="sm">${esc(s.gov)}</td></tr>`).join('')}</table>`);
+      ${r.supports.map(x => `<tr><td><code>${x.label}</code></td><td class="num">${fmt(x.Vmax, 1)}</td><td class="num">${fmt(x.Vmin, 1)}</td><td class="sm">${esc(x.gov)}</td></tr>`).join('')}</table>`);
     if (r.warnings.length) h += card('Ostrzeżenia', r.warnings.map(w => `<div class="msg warn">${esc(w.msg)}</div>`).join(''), 'warn');
     return work(h);
   },
@@ -266,12 +292,31 @@ const VIEWS = {
   },
 };
 
-function render({ bar = true } = {}) {
+// Przebudowa widoku: zatwierdzenie aktywnego pola przed podmianą HTML (blur → change → render) i blokada
+// zagnieżdżenia — inaczej podmiana treści w trakcie podmiany (błąd przeglądarki „node to be removed…”).
+let rendering = false, renderAgain = null;
+function render(opts = {}) {
+  if (rendering) { renderAgain = { bar: (renderAgain?.bar ?? false) || opts.bar !== false }; return; }
+  rendering = true;
+  try {
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    renderNow(opts);
+  } finally { rendering = false; }
+  if (renderAgain) { const o = renderAgain; renderAgain = null; render(o); }
+}
+function renderNow({ bar = true } = {}) {
   if (bar) renderBar();
   document.body.dataset.view = S.tab;
   $('#view').innerHTML = VIEWS[S.tab]();
   const f = $('#formulas'); if (f) f.onchange = () => { S.project.combination.formulas = f.value === 'ab' ? ['6.10a', '6.10b'] : ['6.10']; markStale(); };
-  const m = $('#mapSel'); if (m) m.onchange = () => { S.mapKey = m.value; draw(); };
+  const m = $('#mapSel'); if (m) m.onchange = () => { S.mapKey = m.value; render({ bar: false }); };
+  const sr = $('#srcSel'); if (sr) sr.onchange = () => { S.vopt.src = sr.value; render({ bar: false }); };
+  document.querySelectorAll('[data-vopt]').forEach(c => { c.onchange = () => {
+    const k = c.dataset.vopt;
+    if (c.type === 'checkbox') S.vopt[k] = c.checked; else { const n = parseFloat(String(c.value).replace(',', '.')); S.vopt[k] = Number.isFinite(n) ? (k === 'bands' ? Math.max(4, Math.min(24, Math.round(n))) : n) : null; }
+    if (k === 'auto' && !c.checked) { const sc = makeScale(currentMap().values); S.vopt.min = +sc.min.toPrecision(4); S.vopt.max = +sc.max.toPrecision(4); }
+    render({ bar: false });
+  }; });
   const vn = $('#variantName'); if (vn) vn.onchange = () => { S.ids.variantName = vn.value; };
   document.querySelectorAll('[data-act-layer]').forEach(c => { c.onchange = () => { c.checked ? S.hiddenLayers.delete(c.dataset.actLayer) : S.hiddenLayers.add(c.dataset.actLayer); draw(); }; });
   mountCanvas();
@@ -316,6 +361,68 @@ const MAPS = [
   ...LAY.flatMap(([k, n]) => [{ key: `wk_${k}`, name: `Szerokość rys ${n}`, unit: 'mm', zero: true, group: 'Rysy i naprężenia' }, { key: `sigS_${k}`, name: `σs ${n} — charakterystyczna`, unit: 'MPa', d: 0, group: 'Rysy i naprężenia' }, { key: `sigC_${k}`, name: `σc ${n} — charakterystyczna`, unit: 'MPa', d: 1, group: 'Rysy i naprężenia' }]),
 ];
 const mapDef = key => MAPS.find(m => m.key === key);
+// Wielkości podstawowe z wyborem przypadku / kombinacji (pola węzłowe na przypadek z obliczeń)
+const BASE = { w: ['Ugięcie sprężyste w', 'mm', 1000, false], mx: ['Moment mx', 'kNm/m', 1, true], my: ['Moment my', 'kNm/m', 1, true], mxy: ['Moment mxy', 'kNm/m', 1, true],
+  vx: ['Siła poprzeczna vx', 'kN/m', 1, true], vy: ['Siła poprzeczna vy', 'kN/m', 1, true] };
+const HIDDEN_GROUPS = new Set(['Momenty SGN (obwiednia)', 'Momenty SGU']); // zastąpione wyborem źródła
+const SCH = { ULS: 'SGN', CHAR: 'charakterystyczna', QP: 'quasi-stała' };
+function sourceOptions() {
+  const r = S.res, o = [];
+  for (const k of ['ULS', 'CHAR', 'QP']) o.push([`env:${k}:max`, `Obwiednia ${SCH[k]} — max`], [`env:${k}:min`, `Obwiednia ${SCH[k]} — min`]);
+  r.cases.forEach((n, i) => o.push([`case:${i}`, `Przypadek ${n} (wartości charakterystyczne)`]));
+  for (const k of ['ULS', 'CHAR', 'QP']) r.schemesView[k].forEach((v, j) => o.push([`combo:${k}:${j}`, `Kombinacja ${SCH[k]} ${v.name.startsWith(SCH[k]) ? '' : v.name} — wszystkie obciążenia`]));
+  return o;
+}
+const srcLabel = src => sourceOptions().find(([k]) => k === src)?.[1] ?? '';
+const mapCache = new Map();
+let locCache = null;
+const loc = () => (locCache ??= locator(S.res.mesh.nodes, S.res.mesh.elems));
+function currentMap(key = S.mapKey, src = S.vopt.src) {
+  if (key.startsWith('q:')) {
+    const q = key.slice(2), [name, unit, k, div] = BASE[q], ck = `${q}|${src}`;
+    if (!mapCache.has(ck)) {
+      const F = S.res.caseFields[q], [kind, a, b] = src.split(':');
+      const v = kind === 'case' ? F[+a] : kind === 'env' ? envelope(F, S.res.schemesView[a])[b] : combine(F, S.res.schemesView[a][+b].hi);
+      mapCache.set(ck, Float32Array.from(v, x => x * k));
+    }
+    return { name, unit, div, d: 2, values: mapCache.get(ck), src: srcLabel(src) };
+  }
+  const d = mapDef(key);
+  return { name: d.name, unit: d.unit, div: !!d.div, d: d.d ?? 2, values: mapValues(key), src: '' };
+}
+const scaleFor = cm => makeScale(cm.values, { min: S.vopt.auto ? null : S.vopt.min, max: S.vopt.auto ? null : S.vopt.max, bands: S.vopt.bands, symmetric: cm.div && S.vopt.sym, smooth: S.vopt.smooth });
+// Mapa z izoliniami, ekstremami i przekrojami (na ekranie i do raportu)
+function paintMap(c, v, cm, { legendEl = null, sections = true, zones = null } = {}) {
+  const sc = scaleFor(cm), r = S.res, f = x => fmt(x, cm.d);
+  drawMap(c, v, r.mesh, cm.values, sc);
+  if (S.vopt.mesh) drawMesh(c, v, r.mesh, 'rgba(0,0,0,0.18)');
+  if (S.vopt.iso) drawIsolines(c, v, isolines(r.mesh.nodes, r.mesh.elems, cm.values, sc.levels.slice(1, -1)), f);
+  const ex = extrema(cm.values);
+  for (const z of zones ?? []) {
+    const a = v.toScreen([z.rect.x0, z.rect.y0]), b = v.toScreen([z.rect.x1, z.rect.y1]);
+    c.setLineDash([6, 4]); c.strokeStyle = '#1d1d1b'; c.lineWidth = 1.2; c.strokeRect(a[0], b[1], b[0] - a[0], a[1] - b[1]); c.setLineDash([]);
+    c.fillStyle = '#1d1d1b'; c.font = '11px IBM Plex Mono, monospace'; c.fillText(z.bar && !z.bar.fail ? `+#${z.bar.phi} co ${z.bar.perSpacing === 2 ? z.bar.s * 2 : z.bar.s}` : '?', a[0] + 3, b[1] + 12);
+  }
+  drawGeometry(c, v, S.geo, { light: true, fields: S.project.sls.fields });
+  if (sections) (S.project.sections ?? []).forEach((sec, i) => drawSection(c, v, sec, sectionProfile(r.mesh.nodes, r.mesh.elems, cm.values, sec.a, sec.b, 200, loc()), f, i === S.secSel));
+  if (S.vopt.ext) drawExtrema(c, v, r.mesh.nodes, ex, f, cm.unit);
+  if (legendEl) legendEl.innerHTML = robotLegend(sc, cm, f, ex);
+  return { sc, ex };
+}
+// Wykres przekroju (SVG): wartości wzdłuż odcinka, oś zera, ekstrema i wartości na końcach
+function sectionChart(sec, pr, cm) {
+  const W = 400, H = 170, pad = 34, pts = pr.samples.filter(o => o.v != null);
+  if (!pts.length) return '<p class="muted">Przekrój poza płytą.</p>';
+  let lo = Math.min(0, ...pts.map(o => o.v)), hi = Math.max(0, ...pts.map(o => o.v)); if (hi - lo < 1e-12) hi = lo + 1;
+  const X = s => pad + (W - 2 * pad) * s / pr.L, Y = v => H - pad + (pad * 2 - H) * (v - lo) / (hi - lo);
+  let path = '', open = false;
+  for (const o of pr.samples) { if (o.v == null) { open = false; continue; } path += `${open ? 'L' : 'M'}${X(o.s).toFixed(1)},${Y(o.v).toFixed(1)}`; open = true; }
+  const lab = (o, anchor) => `<text x="${X(o.s).toFixed(1)}" y="${(Y(o.v) + (o.v >= 0 ? -5 : 13)).toFixed(1)}" text-anchor="${anchor}" font-size="11" font-family="IBM Plex Mono">${fmt(o.v, cm.d)}</text>`;
+  return `<h3>${esc(sec.label)}: ${esc(cm.name)} [${esc(cm.unit)}]</h3><svg viewBox="0 0 ${W} ${H}" style="width:100%;background:#fff;border:1px solid var(--border)">
+    <line x1="${pad}" x2="${W - pad}" y1="${Y(0)}" y2="${Y(0)}" stroke="#888"/><path d="${path}" fill="none" stroke="#1a4d5c" stroke-width="1.8"/>
+    ${[[pr.extrema.max, 'middle'], [pr.extrema.min, 'middle'], [pts[0], 'start'], [pts.at(-1), 'end']].filter(([o], i, all) => all.findIndex(([q]) => Math.abs(X(q.s) - X(o.s)) < 30 && Math.abs(Y(q.v) - Y(o.v)) < 14) === i).map(([o, an]) => lab(o, an)).join('')}
+    <text x="${pad}" y="${H - 6}" font-size="10" fill="#6f6e64">0</text><text x="${W - pad}" y="${H - 6}" font-size="10" fill="#6f6e64" text-anchor="end">${fmt(pr.L)} m</text></svg>`;
+}
 function mapValues(key) { const d = mapDef(key), a = S.res.maps[key]; return d.k ? Float32Array.from(a, v => v * d.k) : a; }
 
 let cv = null, ctx = null, view = null, fittedFor = null;
@@ -348,15 +455,10 @@ function draw() {
   const errors = [...g.errors, ...g.warnings].map(e => ({ ...e, locM: e.loc ? [e.loc[0] * g.scale, e.loc[1] * g.scale] : null }));
   const hl = S.hl ? errors[S.hl.startsWith('e') ? +S.hl.slice(1) : g.errors.length + +S.hl.slice(1)] : null;
   if (['res', 'rebar'].includes(S.tab) && S.res?.ok) {
-    const key = S.tab === 'rebar' ? `Asp_${S.rebarLayer}` : S.mapKey, d = mapDef(key), vals = mapValues(key);
-    const sc = colorScale(vals, { diverging: !!d.div, zeroBlank: !!d.zero });
-    drawMap(ctx, view, S.res.mesh, vals, sc);
-    if (lg) lg.innerHTML = `<b>${esc(d.name)}</b>` + legendHTML(sc, d.unit, v => fmt(v, d.d ?? 2));
-    if (S.tab === 'rebar') for (const z of S.res.rebar.layers[S.rebarLayer].zones) {
-      const a = view.toScreen([z.rect.x0, z.rect.y0]), b = view.toScreen([z.rect.x1, z.rect.y1]);
-      ctx.setLineDash([6, 4]); ctx.strokeStyle = '#1d1d1b'; ctx.lineWidth = 1.2; ctx.strokeRect(a[0], b[1], b[0] - a[0], a[1] - b[1]); ctx.setLineDash([]);
-      ctx.fillStyle = '#1d1d1b'; ctx.font = '11px IBM Plex Mono, monospace'; ctx.fillText(z.bar && !z.bar.fail ? `+#${z.bar.phi} co ${z.bar.perSpacing === 2 ? z.bar.s * 2 : z.bar.s}` : '?', a[0] + 3, b[1] + 12);
-    }
+    const cm = S.tab === 'rebar' ? currentMap(`Asp_${S.rebarLayer}`) : currentMap();
+    paintMap(ctx, view, cm, { legendEl: lg, sections: S.tab === 'res', zones: S.tab === 'rebar' ? S.res.rebar.layers[S.rebarLayer].zones : null });
+    if (S.pick?.pts?.length === 1) { const [x, y] = view.toScreen(S.pick.pts[0]); ctx.fillStyle = '#7b3fb0'; ctx.fillRect(x - 3, y - 3, 6, 6); }
+    return;
   } else if (S.tab === 'calc' && S.res?.ok) drawMesh(ctx, view, S.res.mesh);
   drawGeometry(ctx, view, g, { errors: S.tab === 'geo' ? errors : [], highlight: hl, fields: S.project.sls.fields, light: true });
   if (S.pick?.pts?.length === 1) { const [x, y] = view.toScreen(S.pick.pts[0]); ctx.fillStyle = '#7b3fb0'; ctx.fillRect(x - 3, y - 3, 6, 6); }
@@ -370,8 +472,8 @@ function bindCanvas() {
     if (drag && (Math.abs(e.offsetX - drag.x) + Math.abs(e.offsetY - drag.y) > 3)) { view.pan(e.offsetX - drag.x, e.offsetY - drag.y); drag = { x: e.offsetX, y: e.offsetY, moved: true }; draw(); return; }
     const w = view.toWorld(e.offsetX, e.offsetY); let t = `X = ${fmt(w[0])} m, Y = ${fmt(w[1])} m`;
     if (S.res?.ok && ['res', 'rebar'].includes(S.tab)) {
-      const key = S.tab === 'rebar' ? `Asp_${S.rebarLayer}` : S.mapKey, n = nearestNode(S.res.mesh.nodes, w), d = mapDef(key);
-      if (n.dist * view.scale < 25) t += ` · ${d.name}: <b>${fmt(mapValues(key)[n.index], d.d ?? 2)} ${d.unit}</b>`;
+      const cm = S.tab === 'rebar' ? currentMap(`Asp_${S.rebarLayer}`) : currentMap(), v = loc()(w, cm.values);
+      if (v != null) t += ` · ${cm.name}: <b>${fmt(v, cm.d)} ${cm.unit}</b>`;
     }
     const ro = $('#readout'); if (ro) ro.innerHTML = t;
   };
@@ -379,6 +481,11 @@ function bindCanvas() {
     const moved = drag?.moved; drag = null;
     if (moved || !S.pick) return;
     S.pick.pts.push(view.toWorld(e.offsetX, e.offsetY));
+    if (S.pick.kind === 'section' && S.pick.pts.length === 2) {
+      S.project.sections ??= [];
+      S.project.sections.push({ label: `X${S.project.sections.length + 1}`, a: S.pick.pts[0], b: S.pick.pts[1] });
+      S.secSel = S.project.sections.length - 1; S.pick = null; render({ bar: false }); return;
+    }
     if (S.pick.pts.length === 2) {
       const [[x0, y0], [x1, y1]] = S.pick.pts, n = S.project.sls.fields.length + 1, Ls = +Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)).toFixed(2);
       const L = parseFloat(String(prompt(`Rozpiętość odniesienia L [m] dla pola P${n} (podpowiedź: krótszy bok ${Ls} m):`, Ls)).replace(',', '.'));
@@ -402,7 +509,7 @@ function run() {
     if (data.type === 'progress') { pr.querySelector('.bar').style.width = `${Math.round(data.frac * 100)}%`; pr.querySelector('span').textContent = data.stage; return; }
     pr.classList.add('hidden');
     if (data.type === 'error') { toast(`Błąd obliczeń: ${data.message}`, true); console.error(data.stack); return; }
-    S.res = data.res; S.stale = !data.res.ok; S.drawing = null;
+    S.res = data.res; S.stale = !data.res.ok; S.drawing = null; mapCache.clear(); locCache = null;
     if (data.res.ok) { S.tab = 'res'; toast('Obliczenia zakończone.'); } else toast('Popraw dane — szczegóły w zakładce Obliczenia.', true);
     render();
   };
@@ -410,30 +517,57 @@ function run() {
 }
 
 // ---------- rysunki do raportu (białe tło) ----------
-function renderImage(key, { zones = null } = {}) {
+function renderImage(key, { zones = null, src = 'env:ULS:max', sections = false } = {}) {
   const c = document.createElement('canvas'); c.width = 1400; c.height = 900;
   const x = c.getContext('2d'), v = new View(c);
   x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
   v.fit(bboxOf(S.geo.outline), 40);
-  if (key === 'mesh') drawMesh(x, v, S.res.mesh, 'rgba(26,77,92,0.45)');
+  if (key === 'mesh') { drawMesh(x, v, S.res.mesh, 'rgba(26,77,92,0.45)'); drawGeometry(x, v, S.geo, { light: true, fields: S.project.sls.fields }); }
   else {
-    const d = mapDef(key), vals = mapValues(key), sc = colorScale(vals, { diverging: !!d.div, zeroBlank: !!d.zero });
-    v.fit(bboxOf(S.geo.outline), 40, 230);
-    drawMap(x, v, S.res.mesh, vals, sc);
-    for (let i = 0; i < sc.bands; i++) {
-      const lo = sc.min + (sc.max - sc.min) * i / sc.bands, hi = sc.min + (sc.max - sc.min) * (i + 1) / sc.bands, [r, g, b] = sc.color((lo + hi) / 2), y = 820 - i * 52;
-      x.fillStyle = `rgb(${r},${g},${b})`; x.fillRect(1180, y, 26, 44); x.fillStyle = '#111'; x.font = '18px Arial'; x.fillText(`${fmt(lo, d.d ?? 2)} … ${fmt(hi, d.d ?? 2)}`, 1212, y + 28);
+    const cm = currentMap(key, src);
+    v.fit(bboxOf(S.geo.outline), 40, 250);
+    const { sc, ex } = paintMap(x, v, cm, { zones, sections });
+    // legenda jak w Robocie: nagłówek, pasma od max do min z granicami, ekstrema
+    x.fillStyle = '#111'; x.font = 'bold 18px Arial'; x.fillText(`${cm.name} [${cm.unit}]`, 1150, 36);
+    x.font = '14px Arial'; x.fillStyle = '#555'; if (cm.src) x.fillText(cm.src.slice(0, 34), 1150, 56);
+    const hB = Math.min(44, 700 / sc.bands);
+    for (let i = sc.bands - 1, k = 0; i >= 0; i--, k++) {
+      const [r, g, b] = sc.color((sc.levels[i] + sc.levels[i + 1]) / 2), y = 72 + k * hB;
+      x.fillStyle = `rgb(${r},${g},${b})`; x.fillRect(1150, y, 26, hB - 2); x.fillStyle = '#111'; x.font = '15px Arial'; x.fillText(fmt(sc.levels[i + 1], cm.d), 1184, y + 6);
     }
-    x.fillStyle = '#111'; x.font = 'bold 18px Arial'; x.fillText(d.unit, 1180, 40);
-    for (const z of zones ?? []) { const a = v.toScreen([z.rect.x0, z.rect.y0]), b = v.toScreen([z.rect.x1, z.rect.y1]); x.setLineDash([8, 5]); x.strokeStyle = '#111'; x.lineWidth = 2; x.strokeRect(a[0], b[1], b[0] - a[0], a[1] - b[1]); x.setLineDash([]); }
+    x.fillText(fmt(sc.levels[0], cm.d), 1184, 72 + sc.bands * hB + 4);
+    x.font = 'bold 15px Arial'; x.fillText(`max = ${fmt(ex.max, cm.d)}`, 1150, 72 + sc.bands * hB + 32); x.fillText(`min = ${fmt(ex.min, cm.d)}`, 1150, 72 + sc.bands * hB + 52);
   }
-  drawGeometry(x, v, S.geo, { light: true, fields: S.project.sls.fields });
   return { src: c.toDataURL('image/png'), w: c.width, h: c.height };
+}
+// Wykres przekroju do raportu (canvas)
+function sectionImage(sec, pr, cm) {
+  const W = 1200, H = 420, pad = 70, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'), pts = pr.samples.filter(o => o.v != null);
+  x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+  let lo = Math.min(0, ...pts.map(o => o.v)), hi = Math.max(0, ...pts.map(o => o.v)); if (hi - lo < 1e-12) hi = lo + 1;
+  const X = s => pad + (W - 2 * pad) * s / pr.L, Y = v => H - pad + (2 * pad - H) * (v - lo) / (hi - lo);
+  x.strokeStyle = '#888'; x.beginPath(); x.moveTo(pad, Y(0)); x.lineTo(W - pad, Y(0)); x.stroke();
+  x.strokeStyle = '#1a4d5c'; x.lineWidth = 3; x.beginPath(); let open = false;
+  for (const o of pr.samples) { if (o.v == null) { open = false; continue; } open ? x.lineTo(X(o.s), Y(o.v)) : x.moveTo(X(o.s), Y(o.v)); open = true; }
+  x.stroke(); x.fillStyle = '#111'; x.font = '20px Arial';
+  for (const o of [pr.extrema.max, pr.extrema.min, pts[0], pts.at(-1)]) x.fillText(fmt(o.v, cm.d), Math.min(W - 120, X(o.s) + 4), Y(o.v) + (o.v >= 0 ? -8 : 22));
+  x.font = 'bold 22px Arial'; x.fillText(`${sec.label}: ${cm.name} [${cm.unit}] — ${cm.src}`.slice(0, 90), pad, 34);
+  x.font = '18px Arial'; x.fillStyle = '#555'; x.fillText('0', pad, H - 24); x.fillText(`${fmt(pr.L)} m`, W - pad - 50, H - 24);
+  return { src: c.toDataURL('image/png'), w: W, h: H };
 }
 function reportImages() {
   const out = { mesh: renderImage('mesh'), w_lt: renderImage('w_lt') };
   for (const [k] of LAY) out[`Asp_${k}`] = renderImage(`Asp_${k}`, { zones: S.res.rebar.layers[k].zones });
   out.shearUtil = renderImage('shearUtil');
+  out.mx_uls = renderImage('q:mx', { src: 'env:ULS:max' }); out.my_uls = renderImage('q:my', { src: 'env:ULS:max' });
+  // przekroje zdefiniowane przez projektanta — dla wielkości aktualnie wybranej na mapie
+  const secs = S.project.sections ?? [];
+  if (secs.length) {
+    const cm = currentMap();
+    out.mapSections = renderImage(S.mapKey, { src: S.vopt.src, sections: true });
+    out.sections = secs.map(sec => { const pr = sectionProfile(S.res.mesh.nodes, S.res.mesh.elems, cm.values, sec.a, sec.b, 200, loc()); return { label: sec.label, name: cm.name, unit: cm.unit, src: cm.src, L: pr.L, max: pr.extrema?.max.v, min: pr.extrema?.min.v, img: sectionImage(sec, pr, cm) }; });
+  }
   return out;
 }
 const today = () => new Date().toISOString().slice(0, 10);
@@ -457,6 +591,9 @@ const ACTIONS = {
   addField() { S.pick = { pts: [] }; render(); },
   delField(el) { S.project.sls.fields.splice(+el.dataset.i, 1); S.project.sls.fields.forEach((f, i) => { f.label = `P${i + 1}`; }); markStale(); render(); },
   run,
+  addSection() { S.pick = { kind: 'section', pts: [] }; render({ bar: false }); },
+  selSection(el) { S.secSel = +el.dataset.i; render({ bar: false }); },
+  delSection(el) { S.project.sections.splice(+el.dataset.i, 1); S.project.sections.forEach((x, i) => { x.label = `X${i + 1}`; }); S.secSel = 0; render({ bar: false }); },
   rebarLayer(el) { S.rebarLayer = el.dataset.k; render(); },
   async saveDxf() { const d = ensureDrawing(); await saveFile(`${fileBase()} - zbrojenie.dxf`, d.bytes, 'application/dxf'); toast('Zapisano rysunek DXF.'); },
   reportPdf() {

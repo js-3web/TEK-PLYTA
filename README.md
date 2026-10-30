@@ -19,8 +19,9 @@ Baza projektów: `Dokumenty\TEK-PLYTA\tekplyta.db` (deinstalacja jej nie usuwa).
 
 **Kolejność pracy (zakładki):** Start (projekty) → 1. Geometria (wzorzec DXF, ZWCAD, DXF 2010, kontrola rysunku)
 → 2. Dane (grubość, beton, siatki #ϕ co s, obciążenia z kategoriami, podpory, SGU, pola ugięć z L)
-→ 3. Obliczenia (h0, „Licz”, kontrola równowagi) → 4. Wyniki (mapy: ugięcia, momenty SGN/SGU, siły
-poprzeczne, zbrojenie, rysy, naprężenia) → 5. Zbrojenie (dobrane pręty: siatka + dodatki w strefach,
+→ 3. Obliczenia (h0, „Licz”, kontrola równowagi) → 4. Wyniki (mapy jak w Robocie: dowolny przypadek, kombinacja
+albo obwiednia; warstwice lub barwy ciągłe, skala ręczna, izolinie z wartościami, ekstrema; przekroje przez płytę
+z wykresem) → 5. Zbrojenie (dobrane pręty: siatka + dodatki w strefach,
 przebicie 9.4.3, ścinanie 6.2.2, naprężenia 7.2, rysy i ugięcia na zbrojeniu dobranym) → 6. Rysunek
 (DXF R12 dla ZWCAD: rzut dolny i górny, pręty reprezentatywne, rozkład, opisy) → 7. Raport (PDF, DOCX;
 zapis w bazie) → 8. AI (paczka do sprawdzenia).
@@ -28,7 +29,7 @@ zapis w bazie) → 8. AI (paczka do sprawdzenia).
 ## Testy i weryfikacja
 
 ```
-npm test          # 103 testy: wzorce MES, EC2 (obliczenia ręczne), dobór prętów, DXF, raport, baza, licencja
+npm test          # 113 testów: wzorce MES, EC2 (obliczenia ręczne), dobór prętów, DXF, raport, baza, licencja
 npm run test:ui   # interfejs w Chromium + TEK-PLYTA-klucze (Playwright)
 node tools/export-case.mjs cc.json && python3 tools/cross-check.py cc.json   # niezależny MES xdfem2d
 ```
@@ -80,7 +81,7 @@ Bez klucza publicznego (stan obecny) program działa, a raport ma dopisek „wer
 | `tools/export-case.mjs`, `tools/cross-check.py` | porównanie z niezależnym MES xdfem2d |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 103 testy: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 113 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 
@@ -212,3 +213,14 @@ Decyzje i granice modelu (do raportu, sekcja 12 specyfikacji):
 - przy słupach skurcz przy zbrojeniu górnym daje lokalnie ugięcie w górę (fizyczne, < 1 mm we wzorcu).
 
 Do potwierdzenia u źródła: stosowanie zał. B w PL, kt/k1–k4 i wmax (tabl. 7.1N) w NA.
+
+## Wersja 0.7 (2026-10-30)
+
+- **TEK-PLYTA-klucze** (dawniej TEK-KLUCZE) — zmiana nazwy aplikacji licencyjnej; rejestr licencji zachowany.
+- **Współczynniki normowe edytowalne** (2. Dane → „Współczynniki normowe”): domyślnie wartości normowe; γG, γQ, ξ,
+  ψ, γc, γs, αcc, αct, Es, CRd,c, vmin, k1, vRd,max, β przebicia, rysy k1–k4/kt, wmax, granice 7.2, β ugięć.
+  Zmiana wyróżniona w formularzu, raport wymienia ją z wartością normową (`src/norms/params.js`).
+- **Mapy w stylu Robota**: paleta tęczowa, legenda z granicami pasm i ekstremami, skala automatyczna lub ręczna,
+  liczba kolorów, barwy ciągłe, izolinie z wartościami, znaczniki max/min; wybór przypadku, kombinacji lub obwiedni
+  (SGN, charakterystyczna, quasi-stała); przekroje przez płytę z wykresem na rzucie i w karcie; mapy i przekroje
+  w raporcie (`src/viz/maps.js` — testy: izolinia pola liniowego, przekrój = belka wzorcowa w 3 %).

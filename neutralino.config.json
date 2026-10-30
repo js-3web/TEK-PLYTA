@@ -1,6 +1,6 @@
 {
   "applicationId": "pl.tektoria.tekplyta",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/app/",

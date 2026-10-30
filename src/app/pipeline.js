@@ -29,7 +29,7 @@ import { selectRebar } from '../design/rebar.js';
 import { CONCRETE } from '../norms/en1992-pl.js';
 import { resolveParams, diffParams, ec0Norm, ec2Norm, psiTable } from '../norms/params.js';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 
 // Domyślny projekt — wartości startowe formularzy (projektant zmienia)
 export function defaultProject() {
@@ -50,6 +50,7 @@ export function defaultProject() {
     combination: { formulas: ['6.10a', '6.10b'] },
     punching: { beta: 'uproszczone' },
     sls: { RH: 50, cement: 'N', t0: 28, exposure: 'XC1', fields: [] },
+    sections: [], // przekroje przez płytę (wykresy wyników) — { label, a: [x, y], b: [x, y] } [m]
     norms: {}, // nadpisania współczynników normowych (puste = wartości normowe, src/norms/params.js)
   };
 }
@@ -198,5 +199,8 @@ export function runProject(project, progress = () => {}) {
       fields: sls.fields, iterations: sls.deflection.iterations, converged: sls.deflection.converged },
     materials: { ...uls.mat, norm: undefined }, params, paramChanges: diffParams(params), depths: uls.depths, design: { base: design.base },
     maps, summary,
+    // pola węzłowe na przypadek i współczynniki kombinacji — mapy dowolnego przypadku / kombinacji w przeglądarce
+    caseFields: Object.fromEntries(['w', 'mx', 'my', 'mxy', 'vx', 'vy'].map(q => [q, env.fields.nodes[q].map(a => Float32Array.from(a))])),
+    schemesView: Object.fromEntries(['ULS', 'CHAR', 'QP'].map(k => [k, env.schemes[k].map(v => ({ name: v.name, hi: [...v.hi], lo: [...v.lo] }))])),
   };
 }

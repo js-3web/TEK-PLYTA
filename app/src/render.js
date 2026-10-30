@@ -144,3 +144,72 @@ export function drawDxf(ctx, view, ents, layerColor, hidden = new Set()) {
   }
   ctx.setLineDash([]);
 }
+
+// ---------- mapy w stylu Robota: izolinie, ekstrema, przekroje, legenda ----------
+// Izolinie z opisami: odcinki z isolines() (src/viz/maps.js); opis co ~160 px długości izolinii
+export function drawIsolines(ctx, view, lines, fmtv) {
+  ctx.strokeStyle = 'rgba(20,20,20,0.55)'; ctx.lineWidth = 0.8; ctx.beginPath();
+  for (const { segs } of lines) for (const [p, q] of segs) { const a = view.toScreen(p), b = view.toScreen(q); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+  ctx.stroke();
+  ctx.font = '10px IBM Plex Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const { level, segs } of lines) {
+    let acc = 80;
+    for (const [p, q] of segs) {
+      const a = view.toScreen(p), b = view.toScreen(q); acc += Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (acc < 160) continue; acc = 0;
+      const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], t = fmtv(level), w = ctx.measureText(t).width + 4;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(m[0] - w / 2, m[1] - 6, w, 12); ctx.fillStyle = '#111'; ctx.fillText(t, m[0], m[1]);
+    }
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+// Ekstrema globalne: trójkąt ▲ max, ▼ min z wartością
+export function drawExtrema(ctx, view, nodes, ex, fmtv, unit) {
+  for (const [i, up, col] of [[ex.iMax, true, '#b00020'], [ex.iMin, false, '#0d47a1']]) {
+    if (i < 0) continue;
+    const [x, y] = view.toScreen(nodes[i]), s = 7;
+    ctx.fillStyle = col; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath();
+    if (up) { ctx.moveTo(x, y - s); ctx.lineTo(x - s, y + s * 0.7); ctx.lineTo(x + s, y + s * 0.7); } else { ctx.moveTo(x, y + s); ctx.lineTo(x - s, y - s * 0.7); ctx.lineTo(x + s, y - s * 0.7); }
+    ctx.closePath(); ctx.stroke(); ctx.fill();
+    const t = `${up ? 'max' : 'min'} = ${fmtv(up ? ex.max : ex.min)} ${unit}`;
+    ctx.font = 'bold 11px IBM Plex Sans, sans-serif'; const w = ctx.measureText(t).width + 6;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(x + 9, y - 8, w, 15); ctx.fillStyle = col; ctx.fillText(t, x + 12, y + 3);
+  }
+}
+
+// Przekrój na rzucie: linia, nazwa, wykres wartości (rzędne prostopadłe do linii) z opisem ekstremów
+export function drawSection(ctx, view, sec, prof, fmtv, active = false) {
+  const a = view.toScreen(sec.a), b = view.toScreen(sec.b), L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const n = [-(b[1] - a[1]) / L, (b[0] - a[0]) / L];
+  const vmax = Math.max(1e-12, ...prof.samples.filter(o => o.v != null).map(o => Math.abs(o.v))), k = 45 / vmax;
+  ctx.fillStyle = active ? 'rgba(123,63,176,0.18)' : 'rgba(80,80,80,0.12)'; ctx.strokeStyle = active ? '#7b3fb0' : '#555'; ctx.lineWidth = 1.3;
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) {
+      ctx.beginPath(); const s0 = view.toScreen(run[0].p); ctx.moveTo(s0[0], s0[1]);
+      for (const o of run) { const q = view.toScreen(o.p); ctx.lineTo(q[0] - n[0] * o.v * k, q[1] - n[1] * o.v * k); }
+      const s1 = view.toScreen(run.at(-1).p); ctx.lineTo(s1[0], s1[1]); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    run = [];
+  };
+  for (const o of prof.samples) { if (o.v == null) flush(); else run.push(o); }
+  flush();
+  ctx.setLineDash([8, 4]); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = ctx.strokeStyle; ctx.font = 'bold 12px IBM Plex Sans, sans-serif'; ctx.fillText(sec.label, a[0] + 4, a[1] - 6); ctx.fillText(sec.label, b[0] + 4, b[1] - 6);
+  if (prof.extrema) for (const o of [prof.extrema.max, prof.extrema.min]) {
+    const q = view.toScreen(o.p); ctx.font = '11px IBM Plex Mono, monospace'; ctx.fillText(fmtv(o.v), q[0] - n[0] * o.v * k + 3, q[1] - n[1] * o.v * k - 3);
+  }
+}
+
+// Legenda w układzie Robota: nagłówek (wielkość, jednostka, źródło), pasma od max do min z granicami, ekstrema
+export function robotLegend(sc, { name, unit, src }, fmtv, ex) {
+  const rows = [];
+  for (let i = sc.bands - 1; i >= 0; i--) {
+    const [r, g, b] = sc.color((sc.levels[i] + sc.levels[i + 1]) / 2);
+    rows.push(`<div class="lg-row"><span class="lg-sw" style="background:rgb(${r},${g},${b})"></span>${fmtv(sc.levels[i + 1])}</div>`);
+  }
+  rows.push(`<div class="lg-row"><span class="lg-sw" style="background:transparent;border:0"></span>${fmtv(sc.levels[0])}</div>`);
+  return `<div class="lg-unit">${name} [${unit}]</div>${src ? `<div class="sm muted" style="margin-bottom:4px">${src}</div>` : ''}${rows.join('')}`
+    + (ex ? `<div class="lg-ext">max = ${fmtv(ex.max)}<br>min = ${fmtv(ex.min)}</div>` : '');
+}

@@ -108,6 +108,14 @@ export function buildReport(project, res, images = {}, { date = new Date().toISO
     }
   } else for (const k of ['bottomX', 'bottomY', 'topX', 'topY']) img(`dAs_${k}`, `Dozbrojenie ponad siatkę — ${LAYER[k]} [mm²/m]`);
 
+  img('mx_uls', 'Moment mx — obwiednia SGN max [kNm/m], izolinie i ekstrema');
+  img('my_uls', 'Moment my — obwiednia SGN max [kNm/m], izolinie i ekstrema');
+  if (images.sections?.length) {
+    h2('Przekroje przez płytę');
+    table(['Przekrój', 'Wielkość', 'Źródło', 'L [m]', 'max', 'min'], images.sections.map(x => [x.label, `${x.name} [${x.unit}]`, x.src, f(x.L), f(x.max), f(x.min)]));
+    img('mapSections', 'Przekroje na rzucie (wykresy wartości prostopadle do linii przekroju)');
+    for (const x of images.sections) B.push({ type: 'img', ...x.img, caption: `Przekrój ${x.label}: ${x.name} [${x.unit}] — ${x.src}` });
+  }
   h1('5. Przebicie (6.4)');
   p('VEd z obwiedni SGN reakcji słupów (bez redukcji o obciążenie wewnątrz obwodu). Obwód u1 w odległości 2d, z uwzględnieniem krawędzi (rys. 6.13–6.15) i otworów ≤ 6d (rys. 6.14). β — wartości uproszczone 6.4.3(6); projektant potwierdza spełnienie warunków ich stosowania.');
   table(['Słup', 'Typ', 'VEd [kN]', 'β', 'u1 [m]', 'd [mm]', 'vEd [MPa]', 'vRd,c [MPa]', 'Wykorzystanie', 'vEd,0/vRd,max', 'Asw'],

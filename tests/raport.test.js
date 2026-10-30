@@ -43,3 +43,12 @@ print(json.dumps({'names': z.namelist(), 'pl': 'Założenia' in d, 'pages': d.co
   assert.equal(r.pl, true);
   assert.ok(r.pages >= 3);
 });
+
+test('raport: przekroje zdefiniowane przez projektanta — tabela wartości i wykresy', () => {
+  const sec = { label: 'X1', name: 'Moment mx', unit: 'kNm/m', src: 'Obwiednia SGN — max', L: 6.5, max: 12.3, min: -20.1, img: { src: png, w: 1, h: 1 } };
+  const d = buildReport(project, res, { mesh: { src: png, w: 1, h: 1 }, mapSections: { src: png, w: 1, h: 1 }, sections: [sec] }, { date: '2026-10-30' });
+  const html = renderHTML(d);
+  assert.ok(html.includes('Przekroje przez płytę') && html.includes('Przekrój X1: Moment mx'));
+  const t = d.blocks.find(b => b.type === 'table' && b.head[0] === 'Przekrój');
+  assert.deepEqual(t.rows[0], ['X1', 'Moment mx [kNm/m]', 'Obwiednia SGN — max', '6,50', '12,30', '-20,10']);
+});
