@@ -35,9 +35,11 @@ npm test
 | `src/design/bending.js` | Wood–Armer, obwiednia momentów wymiarujących, przekrój 1 m, wysokości użyteczne |
 | `src/design/punching.js` | obwód kontrolny dla dowolnego obrysu (krawędź, naroże, otwory), nośność 6.4 |
 | `src/design/slab.js` | wymiarowanie całej płyty: zbrojenie w węzłach, uśrednianie nad słupami, przebicie |
+| `src/design/creep.js` | pełzanie φ(∞,t0) i skurcz εcs — zał. B, 3.1.4 |
+| `src/design/sls.js` | przekrój zarysowany, rysy 7.3.4, ugięcia 7.4.3 iteracyjnie w MES (płyta ortotropowa), skurcz (7.21) |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 68 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 76 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 
@@ -144,4 +146,28 @@ Do potwierdzenia u źródła (verified: false w `src/norms/en1992-pl.js`): γc =
 GEO5, StruSoft — tekst NA niesprawdzony), αcc = 1,0, współczynnik 0,4 vs 0,5 w vRd,max (AC:2010 w PN-EN).
 T7 (przykłady książkowe): research zablokowany przez politykę sieci środowiska — do powtórzenia.
 
-Następne: SGU — ugięcia z zarysowaniem i pełzaniem (7.4.3), rysy (7.3.4); β z MES (6.39); 9.4.3.
+
+## Etap 5b (2026-10-30): SGU — ugięcia i rysy
+
+- Pełzanie φ(∞,t0) i skurcz εcs z zał. B (test: C30/37, RH 50 %, h0 250 mm → φ = 2,29, zgodne z rys. 3.1;
+  εcd,0 = 0,482 ‰, zgodne z tabl. 3.2).
+- Ugięcia (7.4.3) w MES: kombinacja quasi-stała, Ec,eff = Ecm/(1 + φ); w każdym elemencie i kierunku ζ i
+  sztywność efektywna przy zbrojeniu zapewnionym = max(siatka, As wymagane SGN); płyta ortotropowa,
+  iteracja do zmiany < 1 %. Skurcz: krzywizna (7.21) jako obciążenie (∫ Bᵀ D κ0 dA).
+  Test: pasmo z zarysowaniem — MES vs niezależne całkowanie krzywizn belki: 0,16 %, 3 iteracje.
+- Rysy (7.3.4): wk z momentów Wood–Armera kombinacji quasi-stałej, wmax wg tabl. 7.1N.
+- Ocena ugięć: pola z rozpiętością L zadaną przez projektanta: w ≤ L/250; Δw ≤ L/500.
+- Wzorzec DXF (60 tys. niewiadomych): SGU 1,9 s, 4 iteracje.
+
+Decyzje i granice modelu (do raportu, sekcja 12 specyfikacji):
+- zarysowanie nieodwracalne w iteracji (ζ tylko rośnie) — bez tego elementy na granicy Mcr oscylowały
+  (±3 %, brak zbieżności); efekt: iteracja monotoniczna, wynik raczej po stronie bezpiecznej;
+- β = 0,5 dla ugięć długotrwałych, β = 1,0 dla ugięcia natychmiastowego od G (7.4.3(3));
+- sprężyny podpór w SGU dzielone przez (1 + φ) — podpory pełzają jak płyta (bez tego słupy względnie
+  3× za sztywne → zaniżone ugięcia przęseł);
+- faza I: przekrój brutto bez zbrojenia; sztywność kierunku liczona z |m| + |mxy|; w strefie zarysowanej ν = 0;
+- Δw (L/500) ≈ w_całkowite − w_natychmiastowe od G (Ecm, bez pełzania) — przybliżenie;
+- ugięcia bezwzględne (z osiadaniem podpór sprężystych), nie względem linii podpór;
+- przy słupach skurcz przy zbrojeniu górnym daje lokalnie ugięcie w górę (fizyczne, < 1 mm we wzorcu).
+
+Do potwierdzenia u źródła: stosowanie zał. B w PL, kt/k1–k4 i wmax (tabl. 7.1N) w NA.

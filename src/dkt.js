@@ -152,3 +152,16 @@ export function cornerMomentMatrices(xy, Dm) {
     return [0, 1, 2].map(r => B[0].map((_, k) => Dm[r][0] * B[0][k] + Dm[r][1] * B[1][k] + Dm[r][2] * B[2][k]));
   });
 }
+
+// Obciążenie zastępcze od krzywizny wymuszonej κ0 = [κx, κy, κxy] (np. skurcz, 7.4.3(6)):
+// f = ∫ Bᵀ D κ0 dA (znak jak momentów: κ0 > 0 wygina płytę jak obciążenie z góry).
+export function initialCurvatureLoad(xy, Dm, k0) {
+  const geo = geometry(xy), hc = hCoefficients(geo.c), wgt = geo.area / 3;
+  const m0 = [0, 1, 2].map(r => Dm[r][0] * k0[0] + Dm[r][1] * k0[1] + Dm[r][2] * k0[2]);
+  const f = new Array(9).fill(0);
+  for (const [xi, eta] of GAUSS) {
+    const B = Bmatrix(geo, hc, xi, eta);
+    for (let k = 0; k < 9; k++) f[k] += wgt * (B[0][k] * m0[0] + B[1][k] * m0[1] + B[2][k] * m0[2]);
+  }
+  return f;
+}

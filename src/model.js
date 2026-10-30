@@ -17,6 +17,8 @@
 //   springs: [{ node, kw, ktx, kty, ktxy }] sprężyny podporowe w węźle (słupy, ściany);
 //            ktxy — wyraz mieszany macierzy obrotowej 2×2 (ściana ukośna: obrót wokół jej osi)
 //   element: 'DKT' (domyślny) albo 'MITC3'
+//   elemD:   tylko DKT — funkcja (elemIndex) => macierz D 3×3 elementu (płyta ortotropowa, np. strefy
+//            zarysowane w SGU); domyślnie D izotropowa z mat
 //   solver:  'sparse' (domyślnie: rzadki Cholesky + zagnieżdżony podział) albo 'skyline'
 //            (profilowy + RCM — zostawiony jako niezależna kontrola wyników)
 //   ordering: tylko dla 'skyline': 'rcm' (domyślnie) albo 'none'
@@ -52,10 +54,15 @@ function tangentTransform([tX, tY]) {
 
 const triArea = xy => 0.5 * ((xy[1][0] - xy[0][0]) * (xy[2][1] - xy[0][1]) - (xy[2][0] - xy[0][0]) * (xy[1][1] - xy[0][1]));
 
-export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], element = 'DKT', solver = 'sparse', ordering = 'rcm' }) {
+export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], element = 'DKT', solver = 'sparse', ordering = 'rcm', elemD = null }) {
   const nn = nodes.length;
-  const el = ELEMENTS[element];
-  if (!el) throw new Error(`Nieznany element: ${element}`);
+  const el0 = ELEMENTS[element];
+  if (!el0) throw new Error(`Nieznany element: ${element}`);
+  if (elemD && element !== 'DKT') throw new Error('elemD (sztywność elementów) — tylko element DKT');
+  const el = elemD ? {
+    stiffness: (xy, m, ie) => dkt.stiffness(xy, elemD(ie)),
+    corners: (xy, m, ie) => dkt.cornerMomentMatrices(xy, elemD(ie)).map(mm => ({ m: mm, q: null })),
+  } : el0;
 
   const T = new Array(nn).fill(null);
   for (const [node, f] of fix) if (f.tangent) T[node] = tangentTransform(f.tangent);
@@ -81,7 +88,7 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
   elems.forEach((e, ie) => {
     const xy = e.map(i => nodes[i]);
     area[ie] = triArea(xy);
-    const Ke = transformElement(el.stiffness(xy, mat), e, T);
+    const Ke = transformElement(el.stiffness(xy, mat, ie), e, T);
     const dofs = elemDofs[ie];
     if (dofs.some(d => eq[d] < 0)) supportElems.set(ie, Ke);
     for (let a = 0; a < 9; a++) {
@@ -126,7 +133,7 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
     }
   });
   elems.forEach((e, ie) => {
-    el.corners(e.map(i => nodes[i]), mat).forEach((c, a) => {
+    el.corners(e.map(i => nodes[i]), mat, ie).forEach((c, a) => {
       const o = (ie * 3 + a) * per;
       for (let r = 0; r < 3; r++) RM.set(c.m[r], o + 9 * r);
       if (withQ) for (let r = 0; r < 2; r++) RM.set(c.q[r], o + 27 + 9 * r);
@@ -137,7 +144,9 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
   const L = solver === 'sparse' ? sparseCholesky(K) : choleskyInPlace(K);
   const solveLin = b => (solver === 'sparse' ? sparseSolve(L, b) : choleskySolve(K, b));
 
-  function solveCase({ q = 0, point = [] } = {}) {
+  // curvature: opcjonalnie (elemIndex) => [κx, κy, κxy] krzywizna wymuszona (skurcz); tylko DKT.
+  // Momenty zwracane są wtedy jako D·κ całkowitej (bez odjęcia κ0) — przypadek służy do ugięć.
+  function solveCase({ q = 0, point = [], curvature = null } = {}) {
     const qOf = typeof q === 'function' ? q : () => q;
     // Pełny wektor obciążeń (także na zablokowanych DOF — do obliczenia reakcji).
     // Obciążenie równomierne skupione w węzłach: q A / 3 na każde ugięcie.
@@ -147,6 +156,16 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
       if (qe) for (const node of elems[ie]) fFull[3 * node] += qe;
     }
     for (const { node, P } of point) fFull[3 * node] += P;
+    if (curvature) {
+      if (element !== 'DKT') throw new Error('Krzywizna wymuszona — tylko element DKT');
+      for (let ie = 0; ie < elems.length; ie++) {
+        const k0 = curvature(ie);
+        if (!k0) continue;
+        const e = elems[ie], Dm = elemD ? elemD(ie) : dkt.plateD(mat.E, mat.t, mat.nu);
+        const fe = transformLoad(dkt.initialCurvatureLoad(e.map(i => nodes[i]), Dm, k0), e, T);
+        fe.forEach((v, a) => { fFull[elemDofs[ie][a]] += v; });
+      }
+    }
     const F = new Float64Array(neq);
     for (let d = 0; d < 3 * nn; d++) if (eq[d] >= 0) F[eq[d]] += fFull[d];
 
@@ -241,4 +260,17 @@ function transformElement(Ke, e, T) {
   });
   const KG = Ke.map(row => G[0].map((_, c) => row.reduce((s, v, k) => s + v * G[k][c], 0)));
   return G[0].map((_, r) => G[0].map((__, c) => G.reduce((s, gRow, k) => s + gRow[r] * KG[k][c], 0)));
+}
+
+// Wektor obciążeń elementu w układzie lokalnym węzłów z warunkiem stycznym: f' = Gᵀ f
+function transformLoad(fe, e, T) {
+  if (!e.some(i => T[i])) return fe;
+  const out = [...fe];
+  e.forEach((node, a) => {
+    if (!T[node]) return;
+    const o = 3 * a + 1, f1 = fe[o], f2 = fe[o + 1];
+    out[o] = T[node][0][0] * f1 + T[node][1][0] * f2;
+    out[o + 1] = T[node][0][1] * f1 + T[node][1][1] * f2;
+  });
+  return out;
 }

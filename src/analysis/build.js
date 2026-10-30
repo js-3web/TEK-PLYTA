@@ -1,6 +1,6 @@
 // Analiza płyty z geometrii DXF: podpory, przypadki obciążeń, reakcje podpór.
 //
-// analyzeSlab(geo, mesh, data) -> { model, cases: Map(nazwa -> wynik), supports, warnings }
+// analyzeSlab(geo, mesh, data) -> { model, cases: Map(nazwa -> wynik), supports, warnings, modelParams, caseDefs }
 //
 // data = {
 //   slab:    { E [kPa], nu, t [m], gamma = 25 [kN/m3], element = 'DKT' },
@@ -104,7 +104,8 @@ export function analyzeSlab(geo, mesh, data) {
   }
 
   const s = data.slab;
-  const model = buildModel({ nodes, elems, mat: { E: s.E, nu: s.nu, t: s.t }, fix, springs: [...springAcc.values()], element: s.element ?? 'DKT' });
+  const modelParams = { nodes, elems, mat: { E: s.E, nu: s.nu, t: s.t }, fix, springs: [...springAcc.values()], element: s.element ?? 'DKT' };
+  const model = buildModel(modelParams);
 
   // --- Przypadki obciążeń: ciężar własny + każda etykieta Q/L/P osobno ---
   const caseDefs = [];
@@ -138,7 +139,8 @@ export function analyzeSlab(geo, mesh, data) {
     r.supportReactions = supports.map(sup => supportReaction(sup, r, nodes, share));
     cases.set(cd.name, r);
   }
-  return { model, cases, supports, warnings };
+  // modelParams i caseDefs — do ponownej budowy modelu ze zmienioną sztywnością (SGU, zarysowanie)
+  return { model, cases, supports, warnings, modelParams, caseDefs, share };
 }
 
 // Udział podpory w reakcji węzła: węzeł zablokowany należy do podpór blokujących (po równo),

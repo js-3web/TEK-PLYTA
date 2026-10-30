@@ -56,3 +56,25 @@ test('przebicie: typy słupów wzorca, β uproszczone, siła = obwiednia SGN rea
   assert.ok(Math.abs(s1.u1 - (1.6 + 4 * Math.PI * 0.213)) < 1e-3);
   assert.ok(Math.abs(s1.rho - Math.sqrt(754 / 219000 * 754 / 207000)) < 1e-9);
 });
+
+test('SGU wzorca: iteracja zbieżna i monotoniczna, w_długotrwałe ≥ w_natychmiastowe(G), rysy z mapą QP', async () => {
+  const { checkSlabSLS } = await import('../src/design/sls.js');
+  const { analysis: an } = { analysis: analyzeSlab(geo, mesh, {
+    slab: { E: 33e6, nu: 0.2, t: h }, columns: { 'domyślne': { E: 33e6, H: 3.6, bottom: 'fixed' } },
+    walls: { 'domyślne': { E: 8e6, t: 0.25, H: 3.6, bottom: 'pinned' } }, edges: { 'domyślne': { type: 'pinned' } },
+    loads: { Q1: 3, Q2: 7.5, L1: 6.2, P1: 25 },
+  }) };
+  const sls = checkSlabSLS({ geo, mesh, analysis: an, env, uls: r, design: { ...design, bottom: { ...design.bottom, sX: 0.15, sY: 0.15 }, top: { ...design.top, sX: 0.15, sY: 0.15 } },
+    sls: { RH: 50, cement: 'N', exposure: 'XC1', fields: [{ label: 'P1', pts: [[7.2, 3.8], [13.3, 3.8], [13.3, 6.6], [7.2, 6.6]], L: 6.7 }] } });
+  assert.ok(sls.deflection.converged);
+  const hist = sls.deflection.history.map(x => x.wMax);
+  hist.slice(1).forEach((v, i) => assert.ok(v >= hist[i] - 1e-12, `monotoniczność: ${hist}`)); // sztywność tylko maleje
+  // Część od pełzania i zarysowania (bez skurczu) ≥ ugięcie natychmiastowe od G. Całkowite może być
+  // mniejsze tuż przy słupach: nad podporą skurcz przy zbrojeniu górnym wygina płytę ku górze (w < 1 mm).
+  let below = 0;
+  sls.deflection.wCreep.forEach((v, i) => { if (sls.instantaneousG.w[i] > 1e-3 && v + 1e-9 < sls.instantaneousG.w[i]) below++; });
+  assert.equal(below, 0, 'ugięcie od pełzania nie mniejsze od natychmiastowego od G');
+  const f = sls.fields[0];
+  assert.ok(f.w > 0 && Math.abs(f.wLim - 6.7 / 250) < 1e-12 && Math.abs(f.dwLim - 6.7 / 500) < 1e-12);
+  assert.ok(Math.abs(sls.phi - 2.2907) < 1e-3, 'φ z zał. B dla h0 = 250 mm');
+});
