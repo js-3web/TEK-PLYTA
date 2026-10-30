@@ -29,9 +29,11 @@ npm test
 | `src/geometry/` | import geometrii z DXF, walidacja, geometria płaska |
 | `src/mesh/mesher.js` | generator siatki dla dowolnego obrysu |
 | `src/analysis/build.js` | słupy, ściany, krawędzie, przypadki obciążeń, reakcje podpór |
+| `src/combinations.js` | kombinacje PN-EN 1990 i obwiednie (SGN 6.10a/b lub 6.10, SGU char./częsta/quasi-stała) |
+| `src/norms/en1990-pl.js` | wymienny zestaw normowy: γ, ξ, ψ (tabl. A1.1) |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 46 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 52 testy: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 
@@ -91,3 +93,23 @@ Bez RCM siatka 1 m: 87 MB i 25 s; z RCM: 5 MB i 0,3 s. Wniosek: siatka zagęszcz
 | siatka jednolita 0,25 m (87 tys.) — solver rzadki / profilowy | — | 4,4 s / 16,9 s; 77 MB / 291 MB |
 
 Do sprawdzenia przez użytkownika: otwarcie `assets/TEK-PLYTA_wzorzec.dxf` w ZWCAD 2022 i zapis jako DXF 2010.
+
+## Etap 4 (2026-10-30): kombinacje i obwiednie wg PN-EN 1990
+
+- Domyślnie SGN = mniej korzystne z (6.10a) i (6.10b), ξ = 0,85 — zgodnie z PN-EN 1990/NA (źródła wtórne);
+  (6.10) jako opcja. SGU: charakterystyczna, częsta, quasi-stała.
+- Każda strefa Q to osobny przypadek; strefy tej samej kategorii = jedno oddziaływanie swobodne
+  (EN 1991-1-1, 6.2.1(1)) — włączane/wyłączane niezależnie, bez ψ0 między sobą. Różne kategorie:
+  jedna wiodąca, pozostałe z ψ0. Stałe G: γG,sup albo γG,inf dla całego przypadku (EN 1990, A1.3.1 uw. 3).
+- Obwiednia liczona „składnik po składniku” (koszt liniowy, nie 2^n) — test: identyczna z pełnym
+  wyliczeniem wszystkich układów. Dla każdego punktu zapamiętana kombinacja rządząca (do Wood–Armera).
+- Pomiar: 30 tys. węzłów, 12 przypadków (10 stref Q), 4 wielkości × 4 schematy — 0,15 s (`bench/obwiednie.mjs`).
+- Testy: przykłady liczone ręcznie (komentarze w teście), belka ciągła dwuprzęsłowa wg tablic
+  (0,0957·qL², −0,125·gL²), równowaga reakcji w kombinacji rządzącej, błędy danych.
+
+Do potwierdzenia z tekstem normy przed wersją do sprzedaży (`src/norms/en1990-pl.js`, `verified: false`):
+wartości ψ0/ψ1/ψ2 w PN-EN 1990/NA (wpisane zalecane CEN, tabl. A1.1), wariant 6.10a w NA.
+
+Znalezione przy okazji (do etapu 5): momenty w węzłach to średnia z elementów — nad linią podpory
+przy elementach wydłużonych (0,25 × 0,5 m) odchyłka +5 % względem belki ciągłej, przy kwadratowych < 1 %.
+Wygładzanie SPR (specyfikacja, sekcja 4) przed wymiarowaniem.
