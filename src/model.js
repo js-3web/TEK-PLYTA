@@ -114,6 +114,17 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
   // Macierze wyników w narożach (liczone raz; momenty dla każdego przypadku = mnożenie przez u)
   const withQ = element !== 'DKT', per = withQ ? 45 : 27; // na naroże: 3 (+2) wiersze × 9
   const RM = new Float64Array(elems.length * 3 * per);
+  // Waga naroża = kąt elementu w węźle. Średnia ważona kątem: po obu stronach dowolnej prostej
+  // przez węzeł (np. linii podpory) suma kątów = 180°, więc obie strony mają równy udział,
+  // niezależnie od liczby trójkątów. Zwykła średnia dawała nad podporą +5 % (etap 4, belka ciągła).
+  const cornerW = new Float64Array(elems.length * 3);
+  elems.forEach((e, ie) => {
+    for (let a = 0; a < 3; a++) {
+      const p = nodes[e[a]], q1 = nodes[e[(a + 1) % 3]], q2 = nodes[e[(a + 2) % 3]];
+      const ux = q1[0] - p[0], uy = q1[1] - p[1], vx = q2[0] - p[0], vy = q2[1] - p[1];
+      cornerW[ie * 3 + a] = Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy);
+    }
+  });
   elems.forEach((e, ie) => {
     el.corners(e.map(i => nodes[i]), mat).forEach((c, a) => {
       const o = (ie * 3 + a) * per;
@@ -170,20 +181,20 @@ export function buildModel({ nodes, elems, mat, fix = new Map(), springs = [], e
       R[o + 2] += -(kxy * u[o + 1] + (sp.kty || 0) * u[o + 2]);
     }
 
-    // Momenty (i siły poprzeczne MITC3) w węzłach: średnia z elementów zbiegających się w węźle
-    const mSum = new Float64Array(3 * nn), qSum = new Float64Array(2 * nn), cnt = new Int32Array(nn);
+    // Momenty (i siły poprzeczne MITC3) w węzłach: średnia ważona kątem z elementów zbiegających się w węźle
+    const mSum = new Float64Array(3 * nn), qSum = new Float64Array(2 * nn), cnt = new Float64Array(nn);
     const ue = new Float64Array(9);
     for (let ie = 0; ie < elems.length; ie++) {
       const e = elems[ie];
       for (let a = 0; a < 3; a++) { ue[3 * a] = u[3 * e[a]]; ue[3 * a + 1] = u[3 * e[a] + 1]; ue[3 * a + 2] = u[3 * e[a] + 2]; }
       for (let a = 0; a < 3; a++) {
-        const node = e[a], o = (ie * 3 + a) * per;
+        const node = e[a], o = (ie * 3 + a) * per, wgt = cornerW[ie * 3 + a];
         for (let r = 0; r < (withQ ? 5 : 3); r++) {
           let v = 0;
           for (let k = 0; k < 9; k++) v += RM[o + 9 * r + k] * ue[k];
-          if (r < 3) mSum[3 * node + r] += v; else qSum[2 * node + r - 3] += v;
+          if (r < 3) mSum[3 * node + r] += wgt * v; else qSum[2 * node + r - 3] += wgt * v;
         }
-        cnt[node]++;
+        cnt[node] += wgt;
       }
     }
     const m = Array.from({ length: nn }, (_, i) => [mSum[3 * i] / cnt[i], mSum[3 * i + 1] / cnt[i], mSum[3 * i + 2] / cnt[i]]);

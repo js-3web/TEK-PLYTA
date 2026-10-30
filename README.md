@@ -31,9 +31,13 @@ npm test
 | `src/analysis/build.js` | słupy, ściany, krawędzie, przypadki obciążeń, reakcje podpór |
 | `src/combinations.js` | kombinacje PN-EN 1990 i obwiednie (SGN 6.10a/b lub 6.10, SGU char./częsta/quasi-stała) |
 | `src/norms/en1990-pl.js` | wymienny zestaw normowy: γ, ξ, ψ (tabl. A1.1) |
+| `src/norms/en1992-pl.js` | wymienny zestaw EC2: γc, γs, αcc, tabl. 3.1, współczynniki przebicia |
+| `src/design/bending.js` | Wood–Armer, obwiednia momentów wymiarujących, przekrój 1 m, wysokości użyteczne |
+| `src/design/punching.js` | obwód kontrolny dla dowolnego obrysu (krawędź, naroże, otwory), nośność 6.4 |
+| `src/design/slab.js` | wymiarowanie całej płyty: zbrojenie w węzłach, uśrednianie nad słupami, przebicie |
 | `assets/TEK-PLYTA_wzorzec.dxf` | wzorzec DXF dla użytkownika |
 | `tools/make-dxf.py` | generator wzorca i plików testowych (ezdxf, tylko dla dewelopera) |
-| `tests/` | 54 testy: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
+| `tests/` | 68 testów: wzorcowe T1–T6, elementy, sprężyny, DXF, siatka, analiza end-to-end, solvery |
 
 ## Stan (2026-10-27)
 
@@ -119,3 +123,25 @@ T8 (decyzja 30.10.2026): brak komercyjnego MES — porównanie z xdfem2d (niezal
 Znalezione przy okazji (do etapu 5): momenty w węzłach to średnia z elementów — nad linią podpory
 przy elementach wydłużonych (0,25 × 0,5 m) odchyłka +5 % względem belki ciągłej, przy kwadratowych < 1 %.
 Wygładzanie SPR (specyfikacja, sekcja 4) przed wymiarowaniem.
+
+## Etap 5a (2026-10-30): wymiarowanie SGN — zginanie i przebicie
+
+- Momenty w węzłach: średnia ważona kątem naroży. SPR (spec. sekcja 4) świadomie NIE wdrożony: dopasowanie
+  wielomianu ścina szczyt momentu nad podporą (załamanie wykresu) — po stronie niebezpiecznej. Na siatce
+  generatora belka ciągła: podpora −1,9 % (oczko 0,5 m) … −0,4 % (0,125 m), przęsło < 0,5 % (test).
+  Odchyłka +5 % z etapu 4 dotyczyła tylko wydłużonych elementów siatki strukturalnej (ekstrapolacja DKT do naroży).
+- Wood–Armer z korektami. Obwiednia: mx + |mxy| = max(mx + mxy, mx − mxy), obie liniowe → obwiedni liczone
+  ściśle; korekty tylko zmniejszają moment, więc wynik jest górnym ograniczeniem (test vs pełne wyliczenie).
+- Przekrój 1 m: prostokątny rozkład naprężeń, ξeff ≤ ξeff,lim (stal uplastyczniona), As,min 9.2.1.1, As,max.
+- Nad słupami momenty górne uśredniane w pasie słup + 2·h (mapa szczytowa i uśredniona).
+- Przebicie: u1 geometrycznie dla dowolnego obrysu (rys. 6.13–6.15), otwory ≤ 6d (rys. 6.14, bez √(l1·l2)),
+  u0 wg 6.4.5(3), β uproszczone 6.4.3(6), vRd,c (6.47), vRd,max, zbrojenie (6.52) przy sr = 0,75d, uout,ef (6.54).
+  VEd bez redukcji o obciążenie wewnątrz obwodu (6.4.4(2) dotyczy stóp) — po stronie bezpiecznej.
+  Naroże wklęsłe obrysu: norma go nie opisuje — β i u0 jak dla krawędziowego + ostrzeżenie.
+- Testy: wszystkie wartości oczekiwane liczone ręcznie (komentarze w testach), tabl. 3.1 sprawdzona wzorami.
+
+Do potwierdzenia u źródła (verified: false w `src/norms/en1992-pl.js`): γc = 1,4 (dwa źródła wtórne zgodne:
+GEO5, StruSoft — tekst NA niesprawdzony), αcc = 1,0, współczynnik 0,4 vs 0,5 w vRd,max (AC:2010 w PN-EN).
+T7 (przykłady książkowe): research zablokowany przez politykę sieci środowiska — do powtórzenia.
+
+Następne: SGU — ugięcia z zarysowaniem i pełzaniem (7.4.3), rysy (7.3.4); β z MES (6.39); 9.4.3.
